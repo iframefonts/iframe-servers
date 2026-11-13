@@ -35,4 +35,4 @@ Stack: Next.js 16 App Router, TypeScript, Prisma 7 (driver adapter `@prisma/adap
 
 ## Deploy
 
-GitHub (github.com/iframefonts/iframe-servers) → Vercel team “iframe” (account info@iframe.gr, not Sinqlo), main = production, at **https://webhosting.iframe.gr**. iframe.gr DNS is on Cloudflare (not Plesk): all DNS records go there. Cron in `vercel.json` (07:00 UTC reminders, 01:00 UTC Elorus sync). Database: Neon via the Vercel Marketplace.
+GitHub (github.com/iframefonts/iframe-servers) → Vercel team “iframe” (account info@iframe.gr, not Sinqlo), main = production, at **https://webhosting.iframe.gr**. iframe.gr DNS is on Cloudflare, which delegates webhosting.iframe.gr to the Plesk server (ns32571/ns32572.grserver.gr). The app's DNS records (Vercel A record, Resend records) live in the Plesk zone. Emails come from billing@webhosting.iframe.gr (no mailbox), with replies going to info@iframe.gr. Cron in `vercel.json` (07:00 UTC reminders, 01:00 UTC Elorus sync). Database: Neon via the Vercel Marketplace.

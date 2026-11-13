@@ -9,7 +9,7 @@ export const env = {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean),
   adminEmail: e.ADMIN_EMAIL ?? "info@iframe.gr",
-  emailFrom: e.EMAIL_FROM ?? "iFRAME Billing <billing@iframe.gr>",
+  emailFrom: e.EMAIL_FROM ?? "iFRAME Billing <billing@webhosting.iframe.gr>",
   /** Where client replies go ("Details wrong? Reply to this email"). */
   emailReplyTo: e.EMAIL_REPLY_TO ?? "info@iframe.gr",
   cronSecret: e.CRON_SECRET ?? "",

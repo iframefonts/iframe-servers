@@ -38,7 +38,7 @@ One Next.js app with Postgres. Claude Code knows this stack well, and it deploys
 | UI | Tailwind + shadcn/ui | Fast, clean admin tables and forms |
 | Database | Neon Postgres (connected through Vercel) + Prisma | Relations, unique constraints for idempotency |
 | Auth | Auth.js with email magic link, allow-list of iFRAME addresses | Only the team logs in |
-| Email | Resend (or SMTP) + React Email templates, GR/EN | Reminder emails from e.g. billing@iframe.gr |
+| Email | Resend (or SMTP) + React Email templates, GR/EN | Reminder emails from e.g. billing@webhosting.iframe.gr |
 | Scheduler | Daily cron at 09:00 Europe/Athens calling `/api/cron/reminders` | Vercel Cron in vercel.json at 07:00 UTC (09:00 Athens in winter, 10:00 in summer) |
 | Jobs | Inngest (decided) | Elorus calls and reminder retries run outside the request, within minutes. A plain jobs table would need a frequent cron worker, and Vercel Hobby cron runs at most daily. The webhook triggers the invoice job immediately |
 | Payments | Viva Smart Checkout via REST (OAuth2 client credentials) | Official API. Viva only; no Stripe |
@@ -273,7 +273,7 @@ Get these ready before Phase 3; Claude Code cannot create them for you.
 - [ ] Elorus myDATA / e-invoicing provider connected, so issued invoices are transmitted
 - [ ] Viva demo account: Smart Checkout client ID and secret, payment source code, Merchant ID and API key (for the webhook key)
 - [ ] Viva webhook created under Settings → API Access → Webhooks once the URL is live
-- [ ] Sending domain for reminders (e.g. billing@iframe.gr) with SPF and DKIM in Resend
+- [ ] Sending domain for reminders (e.g. billing@webhosting.iframe.gr) with SPF and DKIM in Resend
 - [ ] GitHub repo created and connected to Vercel (preview per branch, main = production); Neon database added in Vercel
 - [ ] Export of current clients, domains, plans and expiry dates (CSV)
 

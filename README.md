@@ -43,10 +43,22 @@ The app runs at **https://webhosting.iframe.gr**. iframe.gr's DNS is on **Cloudf
    - Create a Smart Checkout payment source. Set its Success URL to `https://webhosting.iframe.gr/pay/viva/success` and its Failure URL to `https://webhosting.iframe.gr/pay/viva/failure`.
    - Add the webhook `https://webhosting.iframe.gr/api/webhooks/viva` for the event *Transaction Payment Created*.
    - Start in demo mode (`VIVA_ENV=demo`).
-4. **Elorus:**
-   - Use a test organization first.
-   - Set the document series ids in `ELORUS_DOCTYPE_TPY`, `ELORUS_DOCTYPE_APY`, `ELORUS_DOCTYPE_EU` and `ELORUS_DOCTYPE_NON_EU`.
-   - Before the first real invoice, check the lines marked `VERIFY` in `src/lib/elorus/client.ts` against the Elorus API docs.
+4. **Elorus** (API v1.2; confirmed on the demo organization). Set these on Vercel when switching production to the **real** organization:
+
+   | Variable | Real organization value | What it is |
+   |---|---|---|
+   | `ELORUS_TOKEN` | (from Elorus › User Profile › API key) | API token |
+   | `ELORUS_ORG_ID` | `1938566927869805663` | real organization |
+   | `ELORUS_DOCTYPE_TPY` | `1938566928062744516` | ΤΙΜΟΛΟΓΙΟ ΠΑΡΟΧΗΣ ΥΠΗΡΕΣΙΩΝ |
+   | `ELORUS_DOCTYPE_APY` | `1938566928062744517` | Απόδειξη παροχής υπηρεσιών |
+   | `ELORUS_TAX_VAT24` | `1938566928004023931` | ΦΠΑ 24% |
+   | `ELORUS_TAX_VAT0` | `2023461223718192915` | ΦΠΑ 0% |
+   | `ELORUS_PRODUCT_DOMAIN` | `2258072299779393335` | Ανανέωση Domain Name ιστοσελίδας |
+   | `ELORUS_VAT_EXEMPTION_EU` / `_NON_EU` | from the accountant | myDATA exemption category for 0% invoices |
+
+   Also set each hosting plan's *Elorus product ID* (Plans page) to `1938581537578551237` (Ανανέωση Server ιστοσελίδας).
+   The demo organization (`2517377211296646929`) is safe for tests: ΤΠΥ `3661581217997784718`, ΑΠΥ `3661581217997784717`, VAT24 `3661581221017683345`, VAT0 `3661581221017683344`.
+   Once switched, any payment issues a real invoice sent to myDATA: start with a €1 test renewal.
 5. **Email:** emails come from `billing@webhosting.iframe.gr`, with replies going to `info@iframe.gr`. The sending domain is `webhosting.iframe.gr`, verified in Resend with records in Cloudflare. No mailbox is needed for billing@: Resend sends without one, and replies go to info@iframe.gr. Then set `RESEND_API_KEY`.
 6. **Inngest:** install the Inngest Vercel integration. It sets `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
 7. **Cron:** set `CRON_SECRET`. Vercel Cron calls `/api/cron/reminders` and `/api/cron/sync`.

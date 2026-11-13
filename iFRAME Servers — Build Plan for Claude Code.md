@@ -54,11 +54,12 @@ Store money in cents, dates in UTC, and calculate "days left" in Europe/Athens.
 | --- | --- | --- |
 | `Client` | name, company, VAT no (ΑΦΜ), tax office, address, emails\[\], phone, language (el/en), invoice type (ΤΠΥ / ΑΠΥ), **vatRegime (domestic / eu_reverse_charge / non_eu)**, `elorusContactId` | Always linked to an Elorus contact; details synced from Elorus (next section). vatRegime decides the VAT rate and Elorus document type: 24% domestic, 0% reverse charge for EU businesses with a VIES-valid VAT number, outside scope for non-EU |
 | `Website` | domain, clientId, server/host, notes | One client, many sites |
-| `Plan` | name, priceNetCents, periodMonths (12, or 24 for some .gr domains), `elorusProductId` | VAT comes from the client's regime, not the plan |
+| `Plan` | name, kind (hosting / domain), priceNetCents, periodMonths (12, or 24 for .gr domains), `elorusProductId` | VAT comes from the client's regime, not the plan |
 | `HostingPackage` | clientId, planId, customPriceCents?, startDate, `expiresAt`, status (active / expired / cancelled), remindersEnabled | The thing that renews. A payment after expiry sets status back to active |
 | `PackageWebsite` | packageId, websiteId | Join table (Prisma can't enforce foreign keys inside arrays) |
+| `PackageDomain` | packageId, websiteId, planId (a domain plan), customPriceNetCents?, expiresAt | A domain renewed **on the same date** as the package's hosting. It rides along on the hosting renewal it's due on: a .gr domain (24 months) every 2nd year, other endings yearly. Payment moves each item by its own period |
 | `Reminder` | packageId, kind (30d / 7d / 1d / overdue3d), periodEnd, **status (pending / sent / failed)**, attempts, sentAt, emailId | Unique on (packageId, kind, periodEnd). Failed sends retry through Inngest within minutes; Resend gets idempotency key `reminder:{id}` |
-| `PaymentRequest` | packageId, periodEnd, netCents, vatCents, amountCents, token (32 random bytes), expiresAt, provider, vivaOrderCode, status (open / paid / cancelled / expired) | Backs the pay page. Amount is snapshotted at creation and recalculated if the price changes while still open. Moves open → paid exactly once (conditional update) |
+| `PaymentRequest` | packageId, periodEnd, lines (hosting + domains due), netCents, vatCents, amountCents, token (32 random bytes), expiresAt, provider, vivaOrderCode, status (open / paid / cancelled / expired) | Backs the pay page. Amount is snapshotted at creation and recalculated if the price changes while still open. Moves open → paid exactly once (conditional update) |
 | `Payment` | paymentRequestId, provider, transactionId (unique), netCents, vatCents, amountCents, paidAt, status (recorded / needs_refund), rawPayload (90-day retention) | Only the first payment on a request counts and extends the package; a second one (other tab, other provider) is flagged needs_refund |
 | `Invoice` | paymentId, elorusInvoiceId, number, status, emailedAt, emailStatus | Elorus result per payment |
 | `WebhookEvent` / `Job` | provider, eventId (unique), processedAt; job type, attempts, lastError | Idempotency and retries |
@@ -294,6 +295,8 @@ Decided on 13 Nov 2026:
 - **After expiry:** no automatic suspension. If still unpaid 3 days after expiry, alert info@iframe.gr only.
 - **Hosting:** Vercel, deployed from a GitHub repo (github.com/iframefonts/iframe-servers).
 - **Payments:** Viva only. No Stripe.
+- **Domains:** a client's plan can include hosting and domain names. Domains renew on the same date as the hosting; .gr every 2 years, others yearly. When a domain is due, the renewal email, pay page and one Elorus invoice include it as a second line.
+- **Calendar:** a Calendar screen shows renewals per month (next 12 months or a year).
 - **Database:** PostgreSQL — Neon via the Vercel Marketplace in production.
 
 ### Sources

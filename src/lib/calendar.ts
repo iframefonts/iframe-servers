@@ -1,6 +1,7 @@
 import { db as defaultDb, type Db } from "@/lib/db";
 import { athensDayOfMonth, athensMonthKey, monthRange, monthStart } from "@/lib/dates";
 import { amountsFor } from "@/lib/money";
+import { domainsInclude, linesNet, renewalLines } from "@/lib/renewal";
 import { packageStatus, type Status } from "@/lib/status";
 
 export type CalendarEntry = {
@@ -28,6 +29,7 @@ export type CalendarMonth = {
 const include = {
   client: true,
   plan: true,
+  ...domainsInclude,
   websites: { include: { website: true } },
   reminders: true,
   payments: { include: { invoice: true } },
@@ -89,7 +91,7 @@ export async function getCalendar(startKey: string, months: number, opts: { db?:
       domains: domainsOf(p),
       date: p.expiresAt,
       day: athensDayOfMonth(p.expiresAt),
-      amountCents: amountsFor(p.customPriceNetCents ?? p.plan.priceNetCents, p.client.vatRegime).amountCents,
+      amountCents: amountsFor(linesNet(renewalLines(p)), p.client.vatRegime).amountCents,
       status: packageStatus(p, now).primary,
       paid: false,
     });

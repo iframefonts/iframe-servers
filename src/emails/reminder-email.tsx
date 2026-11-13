@@ -10,9 +10,11 @@ export type ReminderEmailProps = {
   expiryDate: string;
   amount: string;
   payUrl: string;
+  /** Extra sentences, e.g. "Includes the renewal of the domain x.gr for 2 years." */
+  extras?: string[];
 };
 
-export function ReminderEmail({ locale, kind, domain, expiryDate, amount, payUrl }: ReminderEmailProps) {
+export function ReminderEmail({ locale, kind, domain, expiryDate, amount, payUrl, extras = [] }: ReminderEmailProps) {
   const s = t[locale];
   const lead = s.reminderLead[kind](domain, expiryDate, amount);
   return (
@@ -25,7 +27,12 @@ export function ReminderEmail({ locale, kind, domain, expiryDate, amount, payUrl
           <Text style={{ fontSize: 22, lineHeight: "28px", fontWeight: 600, color: "#1c1917", margin: "16px 0 8px" }}>
             {s.renewalFor(domain)}
           </Text>
-          <Text style={{ fontSize: 16, lineHeight: "24px", color: "#292524", margin: "0 0 24px" }}>{lead}</Text>
+          <Text style={{ fontSize: 16, lineHeight: "24px", color: "#292524", margin: extras.length ? "0 0 8px" : "0 0 24px" }}>{lead}</Text>
+          {extras.map((x, i) => (
+            <Text key={x} style={{ fontSize: 16, lineHeight: "24px", color: "#292524", margin: i === extras.length - 1 ? "0 0 24px" : "0 0 8px" }}>
+              {x}
+            </Text>
+          ))}
           <Section>
             <Button
               href={payUrl}

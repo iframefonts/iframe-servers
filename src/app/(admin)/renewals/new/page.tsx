@@ -90,12 +90,18 @@ export default async function NewPackagePage({ searchParams }: PageProps<"/renew
                   })}
                 </fieldset>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="3. Plan" htmlFor="planId">
-                    <NativeSelect id="planId" name="planId" required defaultValue={plans[0].id}>
-                      {plans.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} · {formatEur(p.priceNetCents, "en")} net / {p.periodMonths === 24 ? "2 years" : "year"}
-                        </option>
+                  <Field label="3. Plan" htmlFor="planId" hint="Domains that renew with the hosting are added on the package page.">
+                    <NativeSelect id="planId" name="planId" required defaultValue={(plans.find((p) => p.kind === "hosting") ?? plans[0]).id}>
+                      {(["hosting", "domain"] as const).map((kind) => (
+                        <optgroup key={kind} label={kind === "hosting" ? "Hosting" : "Domain only"}>
+                          {plans
+                            .filter((p) => p.kind === kind)
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} · {formatEur(p.priceNetCents, "en")} net / {p.periodMonths === 24 ? "2 years" : "year"}
+                              </option>
+                            ))}
+                        </optgroup>
                       ))}
                     </NativeSelect>
                   </Field>

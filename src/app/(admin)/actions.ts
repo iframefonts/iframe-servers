@@ -28,6 +28,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const planSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
+  kind: z.enum(["hosting", "domain"]),
   price: z.string(),
   periodMonths: z.coerce.number().int().refine((n) => n === 12 || n === 24, "Period is 12 or 24 months"),
   elorusProductId: z.string().trim().optional(),
@@ -42,6 +43,7 @@ export async function savePlan(_: ActionResult | null, formData: FormData): Prom
   const id = String(formData.get("id") ?? "");
   const data = {
     name: parsed.data.name,
+    kind: parsed.data.kind,
     priceNetCents,
     periodMonths: parsed.data.periodMonths,
     elorusProductId: parsed.data.elorusProductId || null,
@@ -258,6 +260,52 @@ export async function updatePackage(id: string, _: ActionResult | null, formData
   revalidatePath(`/renewals/${id}`);
   return { ok: true, message: "Package saved" };
 }
+
+// ---------------- Domains renewed with a package ----------------
+
+const domainSchema = z.object({
+  websiteId: z.string().min(1, "Choose the domain"),
+  planId: z.string().min(1, "Choose a domain plan"),
+  firstRenewal: z.enum(["this", "next"]),
+  customPrice: z.string().optional(),
+});
+
+/** Adds a domain that renews together with the hosting, starting with this or the next renewal. */
+export async function addPackageDomain(packageId: string, _: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = domainSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  const pkg = await db.hostingPackage.findUniqueOrThrow({ where: { id: packageId }, include: { plan: true } });
+  const plan = await db.plan.findUniqueOrThrow({ where: { id: parsed.data.planId } });
+  if (plan.kind !== "domain") return { ok: false, message: "Choose a domain plan" };
+  let customPriceNetCents: number | null = null;
+  if (parsed.data.customPrice) {
+    customPriceNetCents = parseEurToCents(parsed.data.customPrice);
+    if (customPriceNetCents === null) return { ok: false, message: "Custom price is not a valid amount" };
+  }
+  const expiresAt = parsed.data.firstRenewal === "this" ? pkg.expiresAt : addPeriod(pkg.expiresAt, pkg.plan.periodMonths);
+  try {
+    const d = await db.packageDomain.create({
+      data: { packageId, websiteId: parsed.data.websiteId, planId: plan.id, customPriceNetCents, expiresAt },
+      include: { website: true },
+    });
+    await audit(user.email, "domain.added", "HostingPackage", packageId, { domain: d.website.domain, firstRenewal: parsed.data.firstRenewal });
+    revalidatePath(`/renewals/${packageId}`);
+    return { ok: true, message: `${d.website.domain} renews with this package` };
+  } catch (e) {
+    return { ok: false, message: isUnique(e) ? "That domain is already renewed with a package" : errMsg(e) };
+  }
+}
+
+export async function removePackageDomain(domainId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  const d = await db.packageDomain.delete({ where: { id: domainId }, include: { website: true } });
+  await audit(user.email, "domain.removed", "HostingPackage", d.packageId, { domain: d.website.domain });
+  revalidatePath(`/renewals/${d.packageId}`);
+  return { ok: true, message: `${d.website.domain} no longer renews with this package` };
+}
+
+const isUnique = (e: unknown) => typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 
 export async function setReminders(id: string, enabled: boolean): Promise<ActionResult> {
   const user = await requireUser();

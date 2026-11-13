@@ -8,6 +8,7 @@ import { env } from "@/lib/env";
 import { t } from "@/lib/i18n";
 import { formatEur } from "@/lib/money";
 import { getOrCreatePaymentRequest } from "@/lib/payments/requests";
+import { parseLines } from "@/lib/renewal";
 
 export const MAX_REMINDER_ATTEMPTS = 5;
 /** A pending row older than this is treated as a crashed send and retried. */
@@ -160,6 +161,7 @@ export async function sendReminder(reminderId: string, deps: Deps = {}): Promise
           expiryDate,
           amount,
           payUrl: `${env.appUrl}/pay/${pr.token}`,
+          extras: (parseLines(pr.lines) ?? []).filter((l) => l.kind === "domain").map((l) => t[locale].includesDomain(l.label, l.periodMonths)),
         }),
       });
       emailId = res.id;

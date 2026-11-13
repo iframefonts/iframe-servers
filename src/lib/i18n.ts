@@ -21,6 +21,9 @@ export const t = {
       overdue: (d: string, date: string, amt: string) =>
         `Η φιλοξενία του ${d} έληξε στις ${date}. Ανανεώστε με ${amt} με ΦΠΑ.`,
     },
+    includesDomain: (d: string, months: number) => `Περιλαμβάνει και την ανανέωση του domain ${d} για ${months === 24 ? "2 έτη" : "1 έτος"}.`,
+    hostingLine: (plan: string) => `Φιλοξενία ${plan}`,
+    domainLine: (d: string) => `Domain ${d}`,
     payButton: (amt: string) => `Πληρωμή ${amt}`,
     payByCard: (amt: string) => `Πληρωμή ${amt} με κάρτα`,
     emailFooter: "Το παραστατικό θα σας σταλεί αυτόματα μόλις ολοκληρωθεί η πληρωμή. Για απορίες, απαντήστε σε αυτό το email.",
@@ -71,6 +74,9 @@ export const t = {
       overdue: (d: string, date: string, amt: string) =>
         `Hosting for ${d} expired on ${date}. Renew now for ${amt} including VAT.`,
     },
+    includesDomain: (d: string, months: number) => `Includes the renewal of the domain ${d} for ${months === 24 ? "2 years" : "1 year"}.`,
+    hostingLine: (plan: string) => `Hosting ${plan}`,
+    domainLine: (d: string) => `Domain ${d}`,
     payButton: (amt: string) => `Pay ${amt}`,
     payByCard: (amt: string) => `Pay ${amt} by card`,
     emailFooter: "Your invoice is emailed automatically once payment is complete. Questions? Just reply to this email.",

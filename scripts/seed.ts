@@ -29,7 +29,7 @@ async function main() {
     db.plan.create({ data: { name: "Basic", priceNetCents: 8000, periodMonths: 12 } }),
     db.plan.create({ data: { name: "Business", priceNetCents: 12000, periodMonths: 12 } }),
     db.plan.create({ data: { name: "Pro", priceNetCents: 20000, periodMonths: 12 } }),
-    db.plan.create({ data: { name: ".gr domain (2 years)", priceNetCents: 3000, periodMonths: 24 } }),
+    db.plan.create({ data: { name: ".gr domain", kind: "domain", priceNetCents: 3000, periodMonths: 24 } }),
   ]);
 
   const contact = (id: string) => DEFAULT_MOCK_CONTACTS.find((c) => c.id === id)!;
@@ -80,6 +80,8 @@ async function main() {
     await db.reminder.create({ data: { packageId: p1.id, kind, periodEnd: p1.expiresAt, status: "sent", attempts: 1, emailId: "seed", sentAt: days(-ago) } });
   }
   await pastPayment(p1, addPeriod(p1.expiresAt, -12), addPeriod(days(-3), -12));
+  // biokip.gr's .gr domain renews with the hosting every 2nd year, due this time.
+  await db.packageDomain.create({ data: { packageId: p1.id, websiteId: (await db.website.findUniqueOrThrow({ where: { domain: "biokip.gr" } })).id, planId: gr2.id, expiresAt: p1.expiresAt } });
 
   // 2. Mallatou (individual, ΑΠΥ): expires in 22 days, month reminder sent.
   const p2 = await pkg(mallatou.id, ["mallatou.gr"], basic.id, days(22));

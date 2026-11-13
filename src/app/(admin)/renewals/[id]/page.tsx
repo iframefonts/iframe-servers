@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  addPackageDomain,
   markPaidByBankTransfer,
+  removePackageDomain,
   markRefunded,
   resendInvoice,
   retryInvoice,
@@ -11,6 +13,8 @@ import {
 } from "@/app/(admin)/actions";
 import { ActionButton } from "@/components/action-button";
 import { CopyButton } from "@/components/copy-button";
+import { ActionForm, Field, NativeSelect } from "@/components/form-bits";
+import { Input } from "@/components/ui/input";
 import { PageHeader, Section } from "@/components/page-header";
 import { ReminderSheet } from "@/components/reminder-sheet";
 import { RenewalTimeline, type TimelineStep } from "@/components/renewal-timeline";
@@ -25,6 +29,7 @@ import { formatEur } from "@/lib/money";
 import { getOrCreatePaymentRequest } from "@/lib/payments/requests";
 import { domainsOf, packageInclude } from "@/lib/queries";
 import { reminderKindFor } from "@/lib/reminders/engine";
+import { domainIsDue, parseLines, renewalLines } from "@/lib/renewal";
 import { daysLeftLabel, packageStatus } from "@/lib/status";
 import { EditPackageForm } from "./edit-form";
 
@@ -41,7 +46,7 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
   const { id } = await params;
   const pkg = await db.hostingPackage.findUnique({
     where: { id },
-    include: { ...packageInclude, paymentRequests: true, client: { include: { websites: true } } },
+    include: { ...packageInclude, paymentRequests: true, client: { include: { websites: { include: { packageDomain: true } } } } },
   });
   if (!pkg) notFound();
 
@@ -51,6 +56,9 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
   const domains = domainsOf(pkg);
   const pr = pkg.status === "cancelled" ? pkg.paymentRequests.find((r) => +r.periodEnd === +pkg.expiresAt) : await getOrCreatePaymentRequest(pkg.id);
   const plans = await db.plan.findMany({ orderBy: { name: "asc" } });
+  const domainPlans = plans.filter((p) => p.kind === "domain" && p.active);
+  const freeSites = pkg.client.websites.filter((w) => !w.packageDomain);
+  const lines = parseLines(pr?.lines) ?? renewalLines(pkg);
   const activity = await db.auditLog.findMany({ where: { entity: "HostingPackage", entityId: id }, orderBy: { createdAt: "desc" }, take: 12 });
   const missing = missingInvoiceDetails(pkg.client);
   const locale = pkg.client.language;
@@ -115,6 +123,7 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
               {pkg.client.name}
             </Link>{" "}
             · {pkg.plan.name} · {pkg.plan.periodMonths === 24 ? "every 2 years" : "yearly"}
+            {pkg.domains.length > 0 && ` · ${pkg.domains.length} domain${pkg.domains.length === 1 ? "" : "s"}`}
           </>
         }
         actions={
@@ -139,10 +148,111 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
           >
             {pkg.status !== "cancelled" && (
               <div className="rounded-xl border bg-card p-5">
+                <ul aria-label="This renewal charges" className="mb-5 space-y-1 border-b pb-4 text-sm">
+                  {lines.map((l) => (
+                    <li key={`${l.kind}-${l.label}`} className="flex justify-between gap-4">
+                      <span>
+                        {l.kind === "domain" ? `Domain ${l.label}` : `${pkg.plan.kind === "domain" ? "Domain" : "Hosting"} ${l.label}`}
+                        <span className="text-muted-foreground"> · {l.periodMonths === 24 ? "2 years" : "1 year"}</span>
+                      </span>
+                      <span className="num">{formatEur(l.netCents, "en")} net</span>
+                    </li>
+                  ))}
+                </ul>
                 <RenewalTimeline steps={currentSteps} />
               </div>
             )}
           </Section>
+
+          {pkg.status !== "cancelled" && (
+            <Section title="Domains" description="Domain names renewed on the same invoice as the hosting. A .gr domain is added every 2nd renewal.">
+              <div className="rounded-xl border bg-card">
+                {pkg.domains.length > 0 && (
+                  <ul className="divide-y">
+                    {pkg.domains.map((d) => {
+                      const dueNow = domainIsDue(d.expiresAt, pkg.expiresAt);
+                      return (
+                        <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[15px] font-medium">{d.website.domain}</p>
+                            <p className="text-[13px] text-muted-foreground">
+                              {d.plan.name} · {formatEur(d.customPriceNetCents ?? d.plan.priceNetCents, "en")} net every {d.plan.periodMonths === 24 ? "2 years" : "year"} · next{" "}
+                              {formatShortDate(d.expiresAt, "en")}
+                            </p>
+                          </div>
+                          <StatusBadge status={dueNow ? { label: "In this renewal", tone: "progress", icon: "clock" } : { label: "Next time", tone: "muted", icon: "circle" }} />
+                          <ActionButton
+                            action={removePackageDomain.bind(null, d.id)}
+                            variant="ghost"
+                            size="sm"
+                            confirm={{
+                              title: `Stop renewing ${d.website.domain} here?`,
+                              body: "The domain is removed from this package's renewals. Open pay links update. Add it again any time.",
+                              confirmLabel: "Remove Domain",
+                              destructive: true,
+                            }}
+                          >
+                            Remove
+                          </ActionButton>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <div className={pkg.domains.length ? "border-t p-5" : "p-5"}>
+                  {domainPlans.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Add a domain plan first (for example “.gr domain”, 2 years) on{" "}
+                      <Link href="/plans" className="text-primary hover:underline">
+                        Plans
+                      </Link>
+                      .
+                    </p>
+                  ) : freeSites.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Every website of this client already renews its domain somewhere.{" "}
+                      <Link href={`/clients/${pkg.client.id}`} className="text-primary hover:underline">
+                        Add a website
+                      </Link>{" "}
+                      to add another domain.
+                    </p>
+                  ) : (
+                    <ActionForm action={addPackageDomain.bind(null, pkg.id)} submitLabel="Add Domain" resetOnSuccess>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Domain" htmlFor="websiteId">
+                          <NativeSelect id="websiteId" name="websiteId" required defaultValue={freeSites[0].id}>
+                            {freeSites.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {w.domain}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        </Field>
+                        <Field label="Domain plan" htmlFor="planId">
+                          <NativeSelect id="planId" name="planId" required defaultValue={(domainPlans.find((p) => p.periodMonths === 24) ?? domainPlans[0]).id}>
+                            {domainPlans.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} · {formatEur(p.priceNetCents, "en")} / {p.periodMonths === 24 ? "2 years" : "year"}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        </Field>
+                        <Field label="First renewed" htmlFor="firstRenewal" hint="For a 2-year .gr domain: when was it last paid?">
+                          <NativeSelect id="firstRenewal" name="firstRenewal" defaultValue="this">
+                            <option value="this">With this renewal, {formatShortDate(pkg.expiresAt, "en")}</option>
+                            <option value="next">With the next one, {formatShortDate(addPeriod(pkg.expiresAt, pkg.plan.periodMonths), "en")}</option>
+                          </NativeSelect>
+                        </Field>
+                        <Field label="Custom net price (€, optional)" htmlFor="domainPrice">
+                          <Input id="domainPrice" name="customPrice" inputMode="decimal" placeholder="Plan price" />
+                        </Field>
+                      </div>
+                    </ActionForm>
+                  )}
+                </div>
+              </div>
+            </Section>
+          )}
 
           <Section title="Payments" description="Each payment with its Elorus invoice.">
             {payments.length === 0 ? (
@@ -262,6 +372,7 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
                             <strong>{pkg.client.name}</strong>
                             {pkg.client.vatNumber ? ` (ΑΦΜ ${pkg.client.vatNumber})` : ""} in Elorus, sends it to myDATA, and emails it to the client.
                           </p>
+                          {lines.length > 1 && <p>It covers {lines.map((l) => (l.kind === "domain" ? `domain ${l.label} (${l.periodMonths === 24 ? "2 years" : "1 year"})` : `hosting ${l.label}`)).join(" and ")}.</p>}
                           <p>The package renews until {formatDate(addPeriod(pkg.expiresAt, pkg.plan.periodMonths), "en")}. An issued invoice can only be reversed with a credit note.</p>
                           {missing.length > 0 && <p className="text-destructive">Elorus is missing: {missing.join(", ")}. The payment is recorded, but the invoice waits until you fix it.</p>}
                         </div>

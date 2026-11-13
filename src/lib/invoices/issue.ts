@@ -1,14 +1,39 @@
 import { createElement } from "react";
 import { AdminEmail } from "@/emails/admin-email";
 import { db as defaultDb, type Db } from "@/lib/db";
-import { formatShortDate, toDateInput } from "@/lib/dates";
+import { addPeriod, formatShortDate, toDateInput } from "@/lib/dates";
 import { getElorus, missingInvoiceDetails, type ElorusApi } from "@/lib/elorus/client";
 import { syncClientFromElorus } from "@/lib/elorus/sync";
 import { getMailer, type Mailer } from "@/lib/email/send";
 import { env } from "@/lib/env";
 import { formatEur } from "@/lib/money";
+import { parseLines } from "@/lib/renewal";
 
 export const MAX_INVOICE_ATTEMPTS = 5;
+
+const periodText = (start: Date, months: number) => `${formatShortDate(start, "en")} – ${formatShortDate(addPeriod(start, months), "en")}`;
+
+/** Invoice lines from the renewal snapshot: hosting for the period, plus each domain renewed with it. */
+export function invoiceLines(
+  payment: { netCents: number; paymentRequest: { lines: unknown } | null },
+  pkg: { plan: { name: string; kind: string; periodMonths: number; elorusProductId: string | null } },
+  domains: string,
+  periodStart: Date,
+) {
+  const lines = parseLines(payment.paymentRequest?.lines);
+  if (!lines) {
+    return [{ title: `Web hosting ${pkg.plan.name}${domains ? ` (${domains})` : ""}, ${periodText(periodStart, pkg.plan.periodMonths)}`, netCents: payment.netCents, productId: pkg.plan.elorusProductId }];
+  }
+  return lines.map((l) =>
+    l.kind === "domain"
+      ? { title: `Domain name ${l.label}, ${periodText(periodStart, l.periodMonths)}`, netCents: l.netCents, productId: process.env.ELORUS_PRODUCT_DOMAIN || null }
+      : {
+          title: `${pkg.plan.kind === "domain" ? "Domain name" : "Web hosting"} ${l.label}${domains ? ` (${domains})` : ""}, ${periodText(periodStart, l.periodMonths)}`,
+          netCents: l.netCents,
+          productId: pkg.plan.elorusProductId,
+        },
+  );
+}
 
 /** Elorus document series per invoice type and VAT regime. Set the real ids once created in Elorus. */
 export function documentTypeFor(invoiceType: "TPY" | "APY", regime: "domestic" | "eu_reverse_charge" | "non_eu") {
@@ -62,10 +87,8 @@ export async function issueInvoice(paymentId: string, deps: Deps = {}) {
         contactId: client.elorusContactId!,
         documentType: documentTypeFor(client.invoiceType, client.vatRegime),
         date,
-        description: `Web hosting ${pkg.plan.name}${domains ? ` (${domains})` : ""}, ${formatShortDate(periodStart, "en")} – ${formatShortDate(pkg.expiresAt, "en")}`,
-        netCents: payment.netCents,
+        lines: invoiceLines(payment, pkg, domains, periodStart),
         vatRate: payment.paymentRequest?.vatRate ?? 24,
-        productId: pkg.plan.elorusProductId,
       });
       await elorus.recordPayment({ invoiceId: created.id, contactId: client.elorusContactId!, amountCents: payment.amountCents, date });
       invoice = await db.invoice.update({

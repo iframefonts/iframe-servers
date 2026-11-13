@@ -1,6 +1,7 @@
 import type { PaymentProvider } from "@/generated/prisma/enums";
 import { db as defaultDb, isUniqueViolation, type Db } from "@/lib/db";
 import { addPeriod } from "@/lib/dates";
+import { parseLines } from "@/lib/renewal";
 
 export type RecordPaymentInput = {
   provider: PaymentProvider;
@@ -70,6 +71,12 @@ export async function recordPayment(input: RecordPaymentInput, db: Db = defaultD
         where: { id: pr.packageId },
         data: { expiresAt: newExpiresAt, status: "active" },
       });
+      // Domains paid in this renewal move forward by their own period (24 months for .gr).
+      for (const line of parseLines(pr.lines) ?? []) {
+        if (!line.domainId) continue;
+        const d = await tx.packageDomain.findUnique({ where: { id: line.domainId } });
+        if (d) await tx.packageDomain.update({ where: { id: d.id }, data: { expiresAt: addPeriod(d.expiresAt, line.periodMonths) } });
+      }
       await tx.invoice.create({ data: { paymentId: payment.id } });
       return { outcome: "recorded" as const, paymentId: payment.id, newExpiresAt };
     });

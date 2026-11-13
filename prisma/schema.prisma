@@ -27,6 +27,12 @@ enum VatRegime {
   non_eu
 }
 
+/// hosting = yearly hosting tier; domain = domain registration (.gr every 24 months, others 12)
+enum PlanKind {
+  hosting
+  domain
+}
+
 enum PackageStatus {
   active
   expired
@@ -121,11 +127,13 @@ model Website {
   createdAt DateTime @default(now())
 
   packages PackageWebsite[]
+  packageDomain PackageDomain?
 }
 
 model Plan {
   id              String   @id @default(cuid())
   name            String
+  kind            PlanKind @default(hosting)
   priceNetCents   Int
   periodMonths    Int      @default(12)
   elorusProductId String?
@@ -133,6 +141,7 @@ model Plan {
   createdAt       DateTime @default(now())
 
   packages HostingPackage[]
+  domains  PackageDomain[]
 }
 
 model HostingPackage {
@@ -151,6 +160,7 @@ model HostingPackage {
   updatedAt           DateTime      @updatedAt
 
   websites        PackageWebsite[]
+  domains         PackageDomain[]
   reminders       Reminder[]
   paymentRequests PaymentRequest[]
   payments        Payment[]
@@ -165,6 +175,21 @@ model PackageWebsite {
   website   Website        @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@id([packageId, websiteId])
+}
+
+/// A domain registration renewed together with the package's hosting. Its expiry always lines up
+/// with a hosting renewal date, so it rides along on that renewal (e.g. every 2nd year for .gr).
+model PackageDomain {
+  id                  String         @id @default(cuid())
+  packageId           String
+  package             HostingPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  websiteId           String         @unique
+  website             Website        @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  planId              String
+  plan                Plan           @relation(fields: [planId], references: [id])
+  customPriceNetCents Int?
+  expiresAt           DateTime
+  createdAt           DateTime       @default(now())
 }
 
 model Reminder {
@@ -198,6 +223,8 @@ model PaymentRequest {
   amountCents     Int
   /// VAT rate in percent at the time of the snapshot
   vatRate         Int
+  /// Snapshot of what this renewal charges: [{ kind, label, netCents, periodMonths, domainId? }]
+  lines           Json?
   status          PaymentRequestStatus @default(open)
   vivaOrderCode   String?              @unique
   expiresAt       DateTime

@@ -6,6 +6,7 @@ import { addPeriod, formatDate } from "@/lib/dates";
 import { t } from "@/lib/i18n";
 import { formatEur } from "@/lib/money";
 import { loadPayPage } from "@/lib/payments/pay-page";
+import { parseLines } from "@/lib/renewal";
 
 export const metadata: Metadata = { title: "Renewal", robots: { index: false, follow: false } };
 
@@ -40,7 +41,7 @@ export default async function PayPage({ params, searchParams }: PageProps<"/pay/
   }
 
   const amount = formatEur(pr.amountCents, locale);
-  const newEnd = addPeriod(pr.periodEnd, pkg.plan.periodMonths);
+  const lines = parseLines(pr.lines) ?? [{ kind: pkg.plan.kind, label: pkg.plan.name, netCents: pr.netCents, periodMonths: pkg.plan.periodMonths }];
   const vatLine =
     client.vatRegime === "domestic" ? s.vat(pr.vatRate) : client.vatRegime === "eu_reverse_charge" ? s.vatReverse : s.vatOutside;
 
@@ -60,20 +61,23 @@ export default async function PayPage({ params, searchParams }: PageProps<"/pay/
 
       <section className="mt-6 rounded-2xl border bg-card p-5" aria-label={s.total}>
         <dl className="space-y-2 text-[15px]">
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">{s.plan}</dt>
-            <dd className="text-right">{pkg.plan.name}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">{s.period}</dt>
-            <dd className="text-right">
-              {s.months(pkg.plan.periodMonths)}, {s.until} {formatDate(newEnd, locale)}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">{s.net}</dt>
-            <dd className="num">{formatEur(pr.netCents, locale)}</dd>
-          </div>
+          {lines.map((l) => (
+            <div key={`${l.kind}-${l.label}`} className="flex justify-between gap-4">
+              <dt>
+                {l.kind === "domain" || pkg.plan.kind === "domain" ? s.domainLine(l.kind === "domain" ? l.label : domains) : s.hostingLine(l.label)}
+                <span className="block text-[13px] text-muted-foreground">
+                  {s.months(l.periodMonths)}, {s.until} {formatDate(addPeriod(pr.periodEnd, l.periodMonths), locale)}
+                </span>
+              </dt>
+              <dd className="num">{formatEur(l.netCents, locale)}</dd>
+            </div>
+          ))}
+          {lines.length > 1 && (
+            <div className="flex justify-between gap-4 border-t pt-2">
+              <dt className="text-muted-foreground">{s.net}</dt>
+              <dd className="num">{formatEur(pr.netCents, locale)}</dd>
+            </div>
+          )}
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">{vatLine}</dt>
             <dd className="num">{formatEur(pr.vatCents, locale)}</dd>

@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { daysLeft, formatShortDate } from "@/lib/dates";
 import { amountsFor, formatEur } from "@/lib/money";
 import { domainsOf, packageInclude } from "@/lib/queries";
+import { linesNet, renewalLines } from "@/lib/renewal";
 import { daysLeftLabel, packageStatus } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
@@ -115,7 +116,8 @@ export default async function RenewalsPage({ searchParams }: PageProps<"/renewal
             <TableBody>
               {pkgs.map((p) => {
                 const st = packageStatus(p, now);
-                const amount = amountsFor(p.customPriceNetCents ?? p.plan.priceNetCents, p.client.vatRegime).amountCents;
+                const lines = renewalLines(p);
+                const amount = amountsFor(linesNet(lines), p.client.vatRegime).amountCents;
                 return (
                   <TableRow key={p.id} className="relative">
                     <TableCell className="max-w-[260px] font-medium">
@@ -125,7 +127,10 @@ export default async function RenewalsPage({ searchParams }: PageProps<"/renewal
                       <span className="block truncate text-[13px] font-normal text-muted-foreground md:hidden">{p.client.name}</span>
                     </TableCell>
                     <TableCell className="hidden max-w-[220px] truncate md:table-cell">{p.client.name}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{p.plan.name}</TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {p.plan.name}
+                      {lines.length > 1 && <span className="block text-[13px] text-muted-foreground">+ domain{lines.length > 2 ? "s" : ""} this time</span>}
+                    </TableCell>
                     <TableCell>
                       <span className="num">{formatShortDate(p.expiresAt, "en")}</span>
                       <span className="block text-[13px] text-muted-foreground">{p.status === "cancelled" ? "—" : daysLeftLabel(p.expiresAt, now)}</span>

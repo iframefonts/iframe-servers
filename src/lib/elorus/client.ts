@@ -23,10 +23,9 @@ export type CreateInvoiceInput = {
   contactId: string;
   documentType: string; // Elorus document type id (series) for ΤΠΥ / ΑΠΥ / intra-EU / non-EU
   date: string; // YYYY-MM-DD, the payment date
-  description: string;
-  netCents: number;
+  /** One invoice line per item: hosting, plus each domain renewed with it */
+  lines: { title: string; netCents: number; productId?: string | null }[];
   vatRate: number;
-  productId?: string | null;
 };
 
 export type ElorusInvoiceSummary = { id: string; number: string; date: string; totalCents: number; paid: boolean };
@@ -116,16 +115,14 @@ class HttpElorus implements ElorusApi {
         draft: false,
         currency_code: "EUR",
         calculator_mode: "initial",
-        items: [
-          {
-            product: i.productId ?? undefined,
-            title: i.description,
-            quantity: "1",
-            unit_value: (i.netCents / 100).toFixed(2),
-            unit_total: (i.netCents / 100).toFixed(2),
-            taxes: [], // VERIFY: tax ids for 24% / 0% exemption
-          },
-        ],
+        items: i.lines.map((l) => ({
+          product: l.productId ?? undefined,
+          title: l.title,
+          quantity: "1",
+          unit_value: (l.netCents / 100).toFixed(2),
+          unit_total: (l.netCents / 100).toFixed(2),
+          taxes: [], // VERIFY: tax ids for 24% / 0% exemption
+        })),
       }),
     });
     return { id: String(inv.id), number: inv.sequence_flat ?? inv.number ?? String(inv.id) };
@@ -168,7 +165,7 @@ class HttpElorus implements ElorusApi {
 /** In-memory Elorus used when ELORUS_TOKEN is empty (dev) and in tests. */
 export class MockElorus implements ElorusApi {
   contacts = new Map<string, ElorusContact>();
-  invoices: (ElorusInvoiceSummary & { contactId: string; emailedTo?: string[] })[] = [];
+  invoices: (ElorusInvoiceSummary & { contactId: string; emailedTo?: string[]; lines?: CreateInvoiceInput["lines"] })[] = [];
   failNext = 0;
   private seq = 140;
 
@@ -202,7 +199,7 @@ export class MockElorus implements ElorusApi {
     this.maybeFail();
     const id = `inv-${++this.seq}`;
     const number = `${i.documentType}-${String(this.seq).padStart(4, "0")}`;
-    this.invoices.push({ id, number, date: i.date, totalCents: 0, paid: false, contactId: i.contactId });
+    this.invoices.push({ id, number, date: i.date, totalCents: 0, paid: false, contactId: i.contactId, lines: i.lines });
     return { id, number };
   }
   async recordPayment(p: { invoiceId: string; amountCents: number }) {

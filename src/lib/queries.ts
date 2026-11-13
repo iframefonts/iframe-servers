@@ -4,10 +4,12 @@ import { db } from "@/lib/db";
 import { athensDay, athensYear, daysLeft, formatShortDate } from "@/lib/dates";
 import { missingInvoiceDetails } from "@/lib/elorus/client";
 import { formatEur } from "@/lib/money";
+import { annualNet, domainsInclude, linesNet, renewalLines } from "@/lib/renewal";
 
 export const packageInclude = {
   client: true,
   plan: true,
+  ...domainsInclude,
   websites: { include: { website: true } },
   reminders: { orderBy: { createdAt: "desc" as const } },
   payments: { include: { invoice: true }, orderBy: { paidAt: "desc" as const } },
@@ -153,12 +155,12 @@ export async function getTodayCards() {
   const year = athensYear(now);
   const pkgs = await db.hostingPackage.findMany({
     where: { status: { in: ["active", "expired"] } },
-    include: { plan: true, client: true },
+    include: { plan: true, client: true, ...domainsInclude },
   });
-  const price = (p: (typeof pkgs)[number]) => p.customPriceNetCents ?? p.plan.priceNetCents;
+  const price = (p: (typeof pkgs)[number]) => linesNet(renewalLines(p));
   const overdue = pkgs.filter((p) => p.status === "expired");
   const due30 = pkgs.filter((p) => p.status === "active" && daysLeft(p.expiresAt, now) <= 30);
-  const arr = pkgs.filter((p) => p.status === "active").reduce((s, p) => s + Math.round((price(p) / p.plan.periodMonths) * 12), 0);
+  const arr = pkgs.filter((p) => p.status === "active").reduce((s, p) => s + annualNet(p), 0);
   const income = await db.payment.aggregate({
     where: { status: "recorded", paidAt: { gte: athensDay(year, 1, 1), lt: athensDay(year + 1, 1, 1) } },
     _sum: { netCents: true, vatCents: true, amountCents: true },
@@ -177,14 +179,14 @@ export async function getReports(year: number) {
   const [clients, websites, pkgs, payments, allTime] = await Promise.all([
     db.client.findMany({ include: { packages: { select: { status: true } } } }),
     db.website.findMany({ include: { packages: { include: { package: { select: { status: true } } } } } }),
-    db.hostingPackage.findMany({ include: { plan: true } }),
+    db.hostingPackage.findMany({ include: { plan: true, ...domainsInclude } }),
     db.payment.findMany({
       where: { status: "recorded", paidAt: { gte: athensDay(year - 1, 1, 1), lt: athensDay(year + 1, 1, 1) } },
       include: { package: { include: { plan: true, client: true } } },
     }),
     db.payment.aggregate({ where: { status: "recorded" }, _sum: { netCents: true, vatCents: true, amountCents: true } }),
   ]);
-  const price = (p: (typeof pkgs)[number]) => p.customPriceNetCents ?? p.plan.priceNetCents;
+  const price = (p: (typeof pkgs)[number]) => linesNet(renewalLines(p));
   const inYear = (y: number) => payments.filter((p) => athensYear(p.paidAt) === y);
   const sum = (ps: typeof payments) => ({
     net: ps.reduce((s, p) => s + p.netCents, 0),
@@ -251,7 +253,7 @@ export async function getReports(year: number) {
       lastYear: sum(inYear(year - 1)),
       allTime: { net: allTime._sum.netCents ?? 0, vat: allTime._sum.vatCents ?? 0, gross: allTime._sum.amountCents ?? 0 },
     },
-    arrNetCents: active.reduce((s, p) => s + Math.round((price(p) / p.plan.periodMonths) * 12), 0),
+    arrNetCents: active.reduce((s, p) => s + annualNet(p), 0),
     expected: { d30: within(30).reduce((s, p) => s + price(p), 0), d90: within(90).reduce((s, p) => s + price(p), 0) },
     overdue: {
       count: pkgs.filter((p) => p.status === "expired").length,

@@ -33,17 +33,21 @@ The import creates one client, website and package per domain. Each package expi
 
 ## Going live
 
+The app runs at **https://webhosting.iframe.gr**. iframe.gr's DNS is on **Cloudflare** (nameservers `alexis`/`sierra.ns.cloudflare.com`), so every DNS record below goes in the Cloudflare zone, not in Plesk.
+
+0. **Domain:** in Vercel, add `webhosting.iframe.gr` to the project. In Cloudflare, add `CNAME webhosting → cname.vercel-dns.com` (or the exact value Vercel shows) and set it to **DNS only** (grey cloud) so Vercel can issue the SSL certificate.
+
 1. **Database:** add Neon from the Vercel Marketplace. Vercel sets `DATABASE_URL`. The build runs `prisma generate`. Run `pnpm db:migrate` against Neon once.
-2. **Environment variables:** copy every key from `.env.example` into Vercel. Set `APP_URL` to the production domain.
+2. **Environment variables:** copy every key from `.env.example` into Vercel. Set `APP_URL=https://webhosting.iframe.gr` and leave `EMAIL_REDIRECT_TO` empty.
 3. **Viva:**
-   - Create a Smart Checkout payment source. Set its Success URL to `https://<domain>/pay/viva/success` and its Failure URL to `https://<domain>/pay/viva/failure`.
-   - Add the webhook `https://<domain>/api/webhooks/viva` for the event *Transaction Payment Created*.
+   - Create a Smart Checkout payment source. Set its Success URL to `https://webhosting.iframe.gr/pay/viva/success` and its Failure URL to `https://webhosting.iframe.gr/pay/viva/failure`.
+   - Add the webhook `https://webhosting.iframe.gr/api/webhooks/viva` for the event *Transaction Payment Created*.
    - Start in demo mode (`VIVA_ENV=demo`).
 4. **Elorus:**
    - Use a test organization first.
    - Set the document series ids in `ELORUS_DOCTYPE_TPY`, `ELORUS_DOCTYPE_APY`, `ELORUS_DOCTYPE_EU` and `ELORUS_DOCTYPE_NON_EU`.
    - Before the first real invoice, check the lines marked `VERIFY` in `src/lib/elorus/client.ts` against the Elorus API docs.
-5. **Email:** verify the sending domain in Resend (SPF, DKIM) and set `RESEND_API_KEY`.
+5. **Email:** emails come from `billing@iframe.gr`, with replies going to `info@iframe.gr`. Verify `iframe.gr` in Resend by adding its DKIM, SPF and MX records **in Cloudflare**. Then set `RESEND_API_KEY`.
 6. **Inngest:** install the Inngest Vercel integration. It sets `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
 7. **Cron:** set `CRON_SECRET`. Vercel Cron calls `/api/cron/reminders` and `/api/cron/sync`.
 8. **Test:** make one real €1 renewal end to end.

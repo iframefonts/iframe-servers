@@ -35,4 +35,4 @@ Stack: Next.js 16 App Router, TypeScript, Prisma 7 (driver adapter `@prisma/adap
 
 ## Deploy
 
-GitHub (github.com/iframefonts/iframe-servers) → Vercel (main = production). Cron in `vercel.json` (07:00 UTC reminders, 01:00 UTC Elorus sync). Database: Neon via the Vercel Marketplace.
+GitHub (github.com/iframefonts/iframe-servers) → Vercel team “iframe” (account info@iframe.gr, not Sinqlo), main = production, at **https://webhosting.iframe.gr**. iframe.gr DNS is on Cloudflare (not Plesk): all DNS records go there. Cron in `vercel.json` (07:00 UTC reminders, 01:00 UTC Elorus sync). Database: Neon via the Vercel Marketplace.

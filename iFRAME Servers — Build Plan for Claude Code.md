@@ -261,7 +261,7 @@ Reuse the ElorusClient from Phase 1. Confirm endpoints for invoices, document ty
 
 **Phase 6 — Hardening.** Today screen: the Needs attention list first, then the four cards; Reports tab with charts (text summary + table toggle) as in the Dashboard section, with SQL aggregates and a year filter; job retries with backoff and admin alerts after 5 failures; Settings screen with API health checks; audit log; Playwright test of the full happy path with mocks.
 
-**Phase 7 — Deploy.** Connect the GitHub repo to Vercel, add Neon and the production env vars, set the cron in vercel.json, register the live webhook URLs (your Vercel domain) in Viva, one real €1 test renewal end to end, then import real clients.
+**Phase 7 — Deploy.** Connect the GitHub repo to Vercel, add Neon and the production env vars, set the cron in vercel.json, add webhosting.iframe.gr (Cloudflare CNAME, DNS only), register the live webhook URL https://webhosting.iframe.gr/api/webhooks/viva in Viva, one real €1 test renewal end to end, then import real clients.
 
 ## Setup checklist
 
@@ -293,7 +293,7 @@ Decided on 13 Nov 2026:
 - **Billing period:** yearly hosting; some .gr domains renew every 2 years.
 - **1-day reminder:** also copied to the iFRAME team at info@iframe.gr.
 - **After expiry:** no automatic suspension. If still unpaid 3 days after expiry, alert info@iframe.gr only.
-- **Hosting:** Vercel, deployed from a GitHub repo (github.com/iframefonts/iframe-servers).
+- **Hosting:** Vercel (team “iframe”, account info@iframe.gr), deployed from github.com/iframefonts/iframe-servers, at **https://webhosting.iframe.gr**. iframe.gr's DNS is on Cloudflare, so the CNAME and the Resend records go there, not in Plesk.
 - **Payments:** Viva only. No Stripe.
 - **Domains:** a client's plan can include hosting and domain names. Domains renew on the same date as the hosting; .gr every 2 years, others yearly. When a domain is due, the renewal email, pay page and one Elorus invoice include it as a second line.
 - **Calendar:** a Calendar screen shows renewals per month (next 12 months or a year).

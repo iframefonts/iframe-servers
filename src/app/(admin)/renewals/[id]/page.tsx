@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  addPackageDomain,
   markPaidByBankTransfer,
   removePackageDomain,
   markRefunded,
@@ -13,8 +12,6 @@ import {
 } from "@/app/(admin)/actions";
 import { ActionButton } from "@/components/action-button";
 import { CopyButton } from "@/components/copy-button";
-import { ActionForm, Field, NativeSelect } from "@/components/form-bits";
-import { Input } from "@/components/ui/input";
 import { PageHeader, Section } from "@/components/page-header";
 import { ReminderSheet } from "@/components/reminder-sheet";
 import { RenewalTimeline, type TimelineStep } from "@/components/renewal-timeline";
@@ -32,6 +29,7 @@ import { reminderKindFor } from "@/lib/reminders/engine";
 import { domainIsDue, parseLines, renewalLines } from "@/lib/renewal";
 import { daysLeftLabel, packageStatus } from "@/lib/status";
 import { EditPackageForm } from "./edit-form";
+import { HostingAndDomains } from "./plan-domains";
 
 const INVOICE_LABEL = { TPY: "ΤΠΥ", APY: "ΑΠΥ" } as const;
 const REGIME_LABEL = { domestic: "Greek VAT 24%", eu_reverse_charge: "EU reverse charge (0%)", non_eu: "Outside EU (no VAT)" } as const;
@@ -57,6 +55,7 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
   const pr = pkg.status === "cancelled" ? pkg.paymentRequests.find((r) => +r.periodEnd === +pkg.expiresAt) : await getOrCreatePaymentRequest(pkg.id);
   const plans = await db.plan.findMany({ orderBy: { name: "asc" } });
   const domainPlans = plans.filter((p) => p.kind === "domain" && p.active);
+  const hostingPlans = plans.filter((p) => p.kind === "hosting" && p.active && p.priceNetCents > 0).sort((a, b) => a.priceNetCents - b.priceNetCents);
   const freeSites = pkg.client.websites.filter((w) => !w.packageDomain);
   const lines = parseLines(pr?.lines) ?? renewalLines(pkg);
   const activity = await db.auditLog.findMany({ where: { entity: "HostingPackage", entityId: id }, orderBy: { createdAt: "desc" }, take: 12 });
@@ -165,92 +164,61 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
           </Section>
 
           {pkg.status !== "cancelled" && (
-            <Section title="Domains" description="Domain names renewed on the same invoice as the hosting. A .gr domain is added every 2nd renewal.">
-              <div className="rounded-xl border bg-card">
-                {pkg.domains.length > 0 && (
-                  <ul className="divide-y">
-                    {pkg.domains.map((d) => {
-                      const dueNow = domainIsDue(d.expiresAt, pkg.expiresAt);
-                      return (
-                        <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[15px] font-medium">{d.website.domain}</p>
-                            <p className="text-[13px] text-muted-foreground">
-                              {d.plan.name} · {formatEur(d.customPriceNetCents ?? d.plan.priceNetCents, "en")} net every {d.plan.periodMonths === 24 ? "2 years" : "year"} · next{" "}
-                              {formatShortDate(d.expiresAt, "en")}
-                            </p>
-                          </div>
-                          <StatusBadge status={dueNow ? { label: "In this renewal", tone: "progress", icon: "clock" } : { label: "Next time", tone: "muted", icon: "circle" }} />
-                          <ActionButton
-                            action={removePackageDomain.bind(null, d.id)}
-                            variant="ghost"
-                            size="sm"
-                            confirm={{
-                              title: `Stop renewing ${d.website.domain} here?`,
-                              body: "The domain is removed from this package's renewals. Open pay links update. Add it again any time.",
-                              confirmLabel: "Remove Domain",
-                              destructive: true,
-                            }}
-                          >
-                            Remove
-                          </ActionButton>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-                <div className={pkg.domains.length ? "border-t p-5" : "p-5"}>
-                  {domainPlans.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Add a domain plan first (for example “.gr domain”, 2 years) on{" "}
-                      <Link href="/plans" className="text-primary hover:underline">
-                        Plans
-                      </Link>
-                      .
-                    </p>
-                  ) : freeSites.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Every website of this client already renews its domain somewhere.{" "}
-                      <Link href={`/clients/${pkg.client.id}`} className="text-primary hover:underline">
-                        Add a website
-                      </Link>{" "}
-                      to add another domain.
-                    </p>
+            <Section title="Hosting & domains" description="What the client pays for. Domains renew on the same invoice as the hosting; a .gr domain every 2nd renewal.">
+              <HostingAndDomains
+                packageId={pkg.id}
+                hostingPlans={hostingPlans.map((p) => ({ id: p.id, label: `${p.name} · ${formatEur(p.priceNetCents, "en")} net / year` }))}
+                current={{
+                  planId: pkg.planId,
+                  customPrice: pkg.customPriceNetCents != null ? (pkg.customPriceNetCents / 100).toFixed(2) : "",
+                }}
+                missingHostingPlan={pkg.plan.kind !== "hosting" || pkg.plan.priceNetCents === 0}
+                domainPlans={domainPlans.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  periodMonths: p.periodMonths,
+                  label: `${p.name} · ${formatEur(p.priceNetCents, "en")} / ${p.periodMonths === 24 ? "2 years" : "year"}`,
+                }))}
+                freeSites={freeSites.map((w) => ({ id: w.id, domain: w.domain }))}
+                thisRenewal={formatShortDate(pkg.expiresAt, "en")}
+                nextRenewal={formatShortDate(addPeriod(pkg.expiresAt, pkg.plan.periodMonths), "en")}
+                domainRows={
+                  pkg.domains.length === 0 ? (
+                    <p className="px-5 pb-1 text-sm text-muted-foreground">No domain renews with this package.</p>
                   ) : (
-                    <ActionForm action={addPackageDomain.bind(null, pkg.id)} submitLabel="Add Domain" resetOnSuccess>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="Domain" htmlFor="websiteId">
-                          <NativeSelect id="websiteId" name="websiteId" required defaultValue={freeSites[0].id}>
-                            {freeSites.map((w) => (
-                              <option key={w.id} value={w.id}>
-                                {w.domain}
-                              </option>
-                            ))}
-                          </NativeSelect>
-                        </Field>
-                        <Field label="Domain plan" htmlFor="planId">
-                          <NativeSelect id="planId" name="planId" required defaultValue={(domainPlans.find((p) => p.periodMonths === 24) ?? domainPlans[0]).id}>
-                            {domainPlans.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} · {formatEur(p.priceNetCents, "en")} / {p.periodMonths === 24 ? "2 years" : "year"}
-                              </option>
-                            ))}
-                          </NativeSelect>
-                        </Field>
-                        <Field label="First renewed" htmlFor="firstRenewal" hint="For a 2-year .gr domain: when was it last paid?">
-                          <NativeSelect id="firstRenewal" name="firstRenewal" defaultValue="this">
-                            <option value="this">With this renewal, {formatShortDate(pkg.expiresAt, "en")}</option>
-                            <option value="next">With the next one, {formatShortDate(addPeriod(pkg.expiresAt, pkg.plan.periodMonths), "en")}</option>
-                          </NativeSelect>
-                        </Field>
-                        <Field label="Custom net price (€, optional)" htmlFor="domainPrice">
-                          <Input id="domainPrice" name="customPrice" inputMode="decimal" placeholder="Plan price" />
-                        </Field>
-                      </div>
-                    </ActionForm>
-                  )}
-                </div>
-              </div>
+                    <ul className="divide-y">
+                      {pkg.domains.map((d) => {
+                        const dueNow = domainIsDue(d.expiresAt, pkg.expiresAt);
+                        return (
+                          <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[15px] font-medium">{d.website.domain}</p>
+                              <p className="text-[13px] text-muted-foreground">
+                                {d.plan.name} · {formatEur(d.customPriceNetCents ?? d.plan.priceNetCents, "en")} net every{" "}
+                                {d.plan.periodMonths === 24 ? "2 years" : "year"} · next {formatShortDate(d.expiresAt, "en")}
+                              </p>
+                            </div>
+                            <StatusBadge status={dueNow ? { label: "In this renewal", tone: "progress", icon: "clock" } : { label: "Next time", tone: "muted", icon: "circle" }} />
+                            <ActionButton
+                              action={removePackageDomain.bind(null, d.id)}
+                              variant="ghost"
+                              size="sm"
+                              confirm={{
+                                title: `Stop renewing ${d.website.domain} here?`,
+                                body: "The domain is removed from this package's renewals. Open pay links update. Add it again any time.",
+                                confirmLabel: "Remove Domain",
+                                destructive: true,
+                              }}
+                            >
+                              Remove
+                            </ActionButton>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )
+                }
+              />
             </Section>
           )}
 
@@ -327,16 +295,13 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
             )}
           </Section>
 
-          <Section title="Details">
+          <Section title="Details" description="Corrections only: expiry date, websites, notes.">
             <div className="rounded-xl border bg-card p-5">
               <EditPackageForm
                 id={pkg.id}
-                plans={plans.map((p) => ({ id: p.id, label: `${p.name} · ${formatEur(p.priceNetCents, "en")} net / ${p.periodMonths === 24 ? "2 years" : "year"}${p.active ? "" : " (archived)"}` }))}
                 websites={pkg.client.websites.map((w) => ({ id: w.id, domain: w.domain }))}
                 values={{
-                  planId: pkg.planId,
                   expiresAt: pkg.expiresAt,
-                  customPriceNetCents: pkg.customPriceNetCents,
                   notes: pkg.notes ?? "",
                   websiteIds: pkg.websites.map((w) => w.websiteId),
                 }}

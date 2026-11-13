@@ -1,7 +1,7 @@
 "use client";
 
 import { updatePackage } from "@/app/(admin)/actions";
-import { ActionForm, Field, NativeSelect } from "@/components/form-bits";
+import { ActionForm, Field } from "@/components/form-bits";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -11,40 +11,18 @@ function toInput(d: Date) {
 
 export function EditPackageForm({
   id,
-  plans,
   websites,
   values,
 }: {
   id: string;
-  plans: { id: string; label: string }[];
   websites: { id: string; domain: string }[];
-  values: { planId: string; expiresAt: Date; customPriceNetCents: number | null; notes: string; websiteIds: string[] };
+  values: { expiresAt: Date; notes: string; websiteIds: string[] };
 }) {
   return (
     <ActionForm action={updatePackage.bind(null, id)} submitLabel="Save Changes">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Plan" htmlFor="planId">
-          <NativeSelect id="planId" name="planId" defaultValue={values.planId}>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field label="Expires on" htmlFor="expiresAt" hint="Change only to correct a mistake. Payments move it forward automatically.">
-          <Input id="expiresAt" name="expiresAt" type="date" defaultValue={toInput(values.expiresAt)} required />
-        </Field>
-        <Field label="Custom net price (€)" htmlFor="customPrice" hint="Leave empty to use the plan price. Open pay links update.">
-          <Input
-            id="customPrice"
-            name="customPrice"
-            inputMode="decimal"
-            placeholder="Plan price"
-            defaultValue={values.customPriceNetCents != null ? (values.customPriceNetCents / 100).toFixed(2) : ""}
-          />
-        </Field>
-      </div>
+      <Field label="Expires on" htmlFor="expiresAt" hint="Change only to correct a mistake. Payments move it forward automatically.">
+        <Input id="expiresAt" name="expiresAt" type="date" defaultValue={toInput(values.expiresAt)} required className="sm:max-w-[220px]" />
+      </Field>
       <fieldset className="space-y-2">
         <legend className="text-[13px] font-medium">Websites</legend>
         <div className="grid gap-2 sm:grid-cols-2">

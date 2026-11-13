@@ -33,9 +33,9 @@ The import creates one client, website and package per domain. Each package expi
 
 ## Going live
 
-The app runs at **https://webhosting.iframe.gr**. iframe.gr's DNS is on **Cloudflare**. Cloudflare delegates `webhosting.iframe.gr` to Plesk (two NS records, `webhosting` → `ns32571.grserver.gr` and `ns32572.grserver.gr`), so the app's records live in the **Plesk** zone for webhosting.iframe.gr.
+The app runs at **https://webhosting.iframe.gr**. iframe.gr's DNS is on **Cloudflare** (not Plesk). The app's records are in the Cloudflare zone for iframe.gr, all set to **DNS only** (grey cloud): `CNAME webhosting → d489941e332e9be1.vercel-dns-017.com` (Vercel), plus Resend's `resend._domainkey.webhosting` TXT, `send.webhosting` CNAME and `rsend.webhosting` CNAME.
 
-0. **Domain:** `webhosting.iframe.gr` is added to the Vercel project. In the Plesk zone, `webhosting.iframe.gr` has an A record pointing to `76.76.21.21` (Vercel), with no AAAA record.
+0. **Domain:** done. `webhosting.iframe.gr` is on the Vercel project `iframe-servers` and serves HTTPS.
 
 1. **Database:** add Neon from the Vercel Marketplace. Vercel sets `DATABASE_URL`. The build runs `prisma generate`. Run `pnpm db:migrate` against Neon once.
 2. **Environment variables:** copy every key from `.env.example` into Vercel. Set `APP_URL=https://webhosting.iframe.gr` and leave `EMAIL_REDIRECT_TO` empty.
@@ -47,7 +47,7 @@ The app runs at **https://webhosting.iframe.gr**. iframe.gr's DNS is on **Cloudf
    - Use a test organization first.
    - Set the document series ids in `ELORUS_DOCTYPE_TPY`, `ELORUS_DOCTYPE_APY`, `ELORUS_DOCTYPE_EU` and `ELORUS_DOCTYPE_NON_EU`.
    - Before the first real invoice, check the lines marked `VERIFY` in `src/lib/elorus/client.ts` against the Elorus API docs.
-5. **Email:** emails come from `billing@webhosting.iframe.gr`, with replies going to `info@iframe.gr`. The sending domain is `webhosting.iframe.gr`, verified in Resend with records in the Plesk zone for webhosting.iframe.gr (Cloudflare delegates the subdomain to Plesk). No mailbox is needed for billing@: Resend sends without one, and replies go to info@iframe.gr. Then set `RESEND_API_KEY`.
+5. **Email:** emails come from `billing@webhosting.iframe.gr`, with replies going to `info@iframe.gr`. The sending domain is `webhosting.iframe.gr`, verified in Resend with records in Cloudflare. No mailbox is needed for billing@: Resend sends without one, and replies go to info@iframe.gr. Then set `RESEND_API_KEY`.
 6. **Inngest:** install the Inngest Vercel integration. It sets `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
 7. **Cron:** set `CRON_SECRET`. Vercel Cron calls `/api/cron/reminders` and `/api/cron/sync`.
 8. **Test:** make one real €1 renewal end to end.

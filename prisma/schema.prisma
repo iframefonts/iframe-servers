@@ -1,0 +1,270 @@
+// iFRAME Servers — data model. See "Data model" in the build plan.
+// Money is integer cents. Dates are UTC; "days left" is computed in Europe/Athens.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Language {
+  el
+  en
+}
+
+/// ΤΠΥ (business, service invoice) or ΑΠΥ (individual, service receipt)
+enum InvoiceType {
+  TPY
+  APY
+}
+
+enum VatRegime {
+  domestic
+  eu_reverse_charge
+  non_eu
+}
+
+enum PackageStatus {
+  active
+  expired
+  cancelled
+}
+
+enum ReminderKind {
+  d30
+  d7
+  d1
+  overdue3d
+  /// Sent by a person with "Send Reminder"
+  manual
+}
+
+enum ReminderStatus {
+  pending
+  sent
+  failed
+}
+
+enum PaymentProvider {
+  viva
+  bank_transfer
+}
+
+enum PaymentRequestStatus {
+  open
+  paid
+  cancelled
+  expired
+}
+
+enum PaymentStatus {
+  recorded
+  needs_refund
+  refunded
+}
+
+enum InvoiceStatus {
+  pending
+  issued
+  failed
+}
+
+enum EmailStatus {
+  pending
+  sent
+  delivered
+  failed
+}
+
+model LoginToken {
+  id        String    @id @default(cuid())
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Client {
+  id              String      @id @default(cuid())
+  /// null = imported but not yet linked to an Elorus contact (shows as Needs attention)
+  elorusContactId String?     @unique
+  name            String
+  company         String?
+  vatNumber       String?
+  taxOffice       String?
+  address         String?
+  emails          String[]
+  phone           String?
+  language        Language    @default(el)
+  invoiceType     InvoiceType @default(TPY)
+  vatRegime       VatRegime   @default(domestic)
+  notes           String?
+  syncedAt        DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  websites Website[]
+  packages HostingPackage[]
+}
+
+model Website {
+  id        String   @id @default(cuid())
+  domain    String   @unique
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  server    String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  packages PackageWebsite[]
+}
+
+model Plan {
+  id              String   @id @default(cuid())
+  name            String
+  priceNetCents   Int
+  periodMonths    Int      @default(12)
+  elorusProductId String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  packages HostingPackage[]
+}
+
+model HostingPackage {
+  id                  String        @id @default(cuid())
+  clientId            String
+  client              Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  planId              String
+  plan                Plan          @relation(fields: [planId], references: [id])
+  customPriceNetCents Int?
+  startDate           DateTime
+  expiresAt           DateTime
+  status              PackageStatus @default(active)
+  remindersEnabled    Boolean       @default(true)
+  notes               String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  websites        PackageWebsite[]
+  reminders       Reminder[]
+  paymentRequests PaymentRequest[]
+  payments        Payment[]
+
+  @@index([status, expiresAt])
+}
+
+model PackageWebsite {
+  packageId String
+  package   HostingPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  websiteId String
+  website   Website        @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@id([packageId, websiteId])
+}
+
+model Reminder {
+  id        String         @id @default(cuid())
+  packageId String
+  package   HostingPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  kind      ReminderKind
+  periodEnd DateTime
+  /// 0 for automatic reminders (one per kind and period); 1, 2, … for manual sends
+  seq       Int            @default(0)
+  sentBy    String?
+  status    ReminderStatus @default(pending)
+  attempts  Int            @default(0)
+  lastError String?
+  emailId   String?
+  sentAt    DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([packageId, kind, periodEnd, seq])
+}
+
+model PaymentRequest {
+  id              String               @id @default(cuid())
+  packageId       String
+  package         HostingPackage       @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  periodEnd       DateTime
+  token           String               @unique
+  netCents        Int
+  vatCents        Int
+  amountCents     Int
+  /// VAT rate in percent at the time of the snapshot
+  vatRate         Int
+  status          PaymentRequestStatus @default(open)
+  vivaOrderCode   String?              @unique
+  expiresAt       DateTime
+  paidAt          DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  payments Payment[]
+
+  @@unique([packageId, periodEnd])
+}
+
+model Payment {
+  id               String          @id @default(cuid())
+  paymentRequestId String?
+  paymentRequest   PaymentRequest? @relation(fields: [paymentRequestId], references: [id])
+  packageId        String
+  package          HostingPackage  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  provider         PaymentProvider
+  transactionId    String          @unique
+  netCents         Int
+  vatCents         Int
+  amountCents      Int
+  paidAt           DateTime
+  status           PaymentStatus   @default(recorded)
+  /// Provider payload, cleared after 90 days
+  rawPayload       Json?
+  createdAt        DateTime        @default(now())
+
+  invoice Invoice?
+
+  @@index([paidAt])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  paymentId       String        @unique
+  payment         Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  elorusInvoiceId String?
+  number          String?
+  status          InvoiceStatus @default(pending)
+  attempts        Int           @default(0)
+  lastError       String?
+  emailStatus     EmailStatus   @default(pending)
+  emailedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, eventId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String
+  action    String
+  entity    String
+  entityId  String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}

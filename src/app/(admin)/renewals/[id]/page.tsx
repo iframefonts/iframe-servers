@@ -21,7 +21,7 @@ import { addPeriod, daysLeft, formatDate, formatDateTime, formatShortDate } from
 import { missingInvoiceDetails } from "@/lib/elorus/client";
 import { env } from "@/lib/env";
 import { t } from "@/lib/i18n";
-import { documentTypeFor } from "@/lib/invoices/issue";
+import { elorusDocumentFor } from "@/lib/invoices/issue";
 import { formatEur } from "@/lib/money";
 import { getOrCreatePaymentRequest } from "@/lib/payments/requests";
 import { domainsOf, packageInclude } from "@/lib/queries";
@@ -241,7 +241,7 @@ export default async function PackagePage({ params }: PageProps<"/renewals/[id]"
                   if (p.status === "recorded" && inv) {
                     steps.push(
                       inv.status === "issued"
-                        ? { key: "inv", label: `Invoice ${inv.number} issued`, state: "done", detail: documentTypeFor(pkg.client.invoiceType, pkg.client.vatRegime) }
+                        ? { key: "inv", label: `Invoice ${inv.number} issued`, state: "done", detail: elorusDocumentFor(pkg.client.invoiceType, pkg.client.vatRegime).series }
                         : inv.status === "failed"
                           ? { key: "inv", label: "Invoice not issued", state: "failed", detail: inv.lastError ?? undefined }
                           : { key: "inv", label: "Issuing invoice…", state: "current", detail: inv.lastError ? `Retrying: ${inv.lastError}` : undefined },

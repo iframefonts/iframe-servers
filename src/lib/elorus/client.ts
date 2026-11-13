@@ -1,7 +1,8 @@
 /**
- * Elorus API client. Auth: `Authorization: Token <key>` + `X-Elorus-Organization: <org id>`.
- * Paths marked VERIFY must be confirmed against https://developer.elorus.com/ (plan, Phase 5)
- * with the Elorus test organization before going live.
+ * Elorus API v1.2 client (v1.1 is removed on 31 Dec 2026).
+ * Auth: `Authorization: Token <key>` + `X-Elorus-Organization: <org id>`.
+ * Every request format below was confirmed against a demo organization on 2026-11-13:
+ * contact create/read, issued invoice with myDATA classification, cash receipt, invoice email.
  */
 import { env, mock } from "@/lib/env";
 
@@ -10,6 +11,7 @@ export type ElorusContact = {
   name: string; // company or full name
   company?: string;
   vatNumber?: string;
+  /** Elorus stores the ΔΟΥ as a code from its own list; set it in Elorus, not here. */
   taxOffice?: string;
   address?: string;
   emails: string[];
@@ -17,15 +19,28 @@ export type ElorusContact = {
   isCompany: boolean;
 };
 
-export type NewContact = Omit<ElorusContact, "id">;
+export type NewContact = Omit<ElorusContact, "id" | "taxOffice">;
+
+/** How a document is issued in Elorus/myDATA for a client's invoice type and VAT regime. */
+export type ElorusDocumentSpec = {
+  /** Short label for logs and the in-memory mock, e.g. "TPY", "APY", "TPY-EU" */
+  series: string;
+  documentTypeId: string;
+  /** myDATA document type: 2.1 ΤΠΥ, 11.2 ΑΠΥ, 2.2 intra-EU services, 2.3 third-country services */
+  mydataDocumentType: string;
+  /** myDATA income classification type for each line, e.g. E3_561_001 */
+  classificationType: string;
+  taxId: string;
+  /** myDATA VAT exemption category for 0% lines (EU reverse charge / non-EU). Confirm with the accountant. */
+  vatExemptionCategory?: string;
+};
 
 export type CreateInvoiceInput = {
   contactId: string;
-  documentType: string; // Elorus document type id (series) for ΤΠΥ / ΑΠΥ / intra-EU / non-EU
+  doc: ElorusDocumentSpec;
   date: string; // YYYY-MM-DD, the payment date
   /** One invoice line per item: hosting, plus each domain renewed with it */
-  lines: { title: string; netCents: number; productId?: string | null }[];
-  vatRate: number;
+  lines: { title: string; description?: string; netCents: number; productId?: string | null }[];
 };
 
 export type ElorusInvoiceSummary = { id: string; number: string; date: string; totalCents: number; paid: boolean };
@@ -37,14 +52,15 @@ export interface ElorusApi {
   /** Creates an issued (not draft) invoice. Returns its id and number. */
   createInvoice(input: CreateInvoiceInput): Promise<{ id: string; number: string }>;
   /** Records the payment against the invoice so it shows as paid. */
-  recordPayment(input: { invoiceId: string; contactId: string; amountCents: number; date: string }): Promise<void>;
+  recordPayment(input: { invoiceId: string; contactId: string; amountCents: number; date: string; title: string }): Promise<void>;
   /** Emails the invoice with its PDF attached. */
-  emailInvoice(input: { invoiceId: string; to: string[] }): Promise<void>;
+  emailInvoice(input: { invoiceId: string; to: string[]; subject: string; message: string }): Promise<void>;
   listInvoices(contactId: string): Promise<ElorusInvoiceSummary[]>;
   ping(): Promise<boolean>;
 }
 
-const BASE = "https://api.elorus.com/v1.1";
+const BASE = "https://api.elorus.com/v1.2";
+const money = (cents: number) => (cents / 100).toFixed(2);
 
 class HttpElorus implements ElorusApi {
   private async req<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
@@ -63,13 +79,15 @@ class HttpElorus implements ElorusApi {
       await new Promise((r) => setTimeout(r, wait));
       return this.req<T>(path, init, attempt + 1);
     }
-    if (!res.ok) throw new Error(`Elorus ${init.method ?? "GET"} ${path}: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw new Error(`Elorus ${init.method ?? "GET"} ${path}: ${res.status} ${(await res.text()).slice(0, 500)}`);
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
 
   private toContact(c: Record<string, unknown>): ElorusContact {
-    const emails = (c.email as { email: string }[] | undefined)?.map((e) => e.email) ?? [];
-    const addr = (c.addresses as { address?: string; city?: string; zip?: string }[] | undefined)?.[0];
+    const emails = (c.email as { email: string; primary?: boolean }[] | undefined) ?? [];
+    emails.sort((a, b) => Number(Boolean(b.primary)) - Number(Boolean(a.primary)));
+    const addr = (c.addresses as { address?: string; city?: string; zip?: string; ad_type?: string }[] | undefined)?.find((a) => a.ad_type === "bill") ??
+      (c.addresses as { address?: string; city?: string; zip?: string }[] | undefined)?.[0];
     const company = (c.company as string) || undefined;
     const full = [c.first_name, c.last_name].filter(Boolean).join(" ");
     return {
@@ -77,83 +95,100 @@ class HttpElorus implements ElorusApi {
       name: company || full || String(c.display_name ?? ""),
       company,
       vatNumber: (c.vat_number as string) || undefined,
-      taxOffice: (c.tax_office as string) || undefined, // VERIFY field name
+      taxOffice: c.tax_office ? String(c.tax_office) : undefined,
       address: addr ? [addr.address, addr.zip, addr.city].filter(Boolean).join(", ") : undefined,
-      emails,
+      emails: emails.map((e) => e.email).filter(Boolean),
       phone: (c.phones as { number: string }[] | undefined)?.[0]?.number,
-      isCompany: Boolean(c.is_company ?? company),
+      // client_type 1 = business, 4 = individual (Elorus examples)
+      isCompany: Number(c.client_type) === 1 || Boolean(company),
     };
   }
 
   async searchContacts(q: string) {
-    const data = await this.req<{ results: Record<string, unknown>[] }>(`/contacts/?search=${encodeURIComponent(q)}&page_size=20`);
+    const data = await this.req<{ results: Record<string, unknown>[] }>(`/contacts/?search=${encodeURIComponent(q)}&page_size=20&is_client=true`);
     return data.results.map((c) => this.toContact(c));
   }
   async getContact(id: string) {
     return this.toContact(await this.req(`/contacts/${id}/`));
   }
   async createContact(c: NewContact) {
+    const [first, ...rest] = c.isCompany ? [""] : c.name.split(" ");
     const body = {
-      company: c.company ?? (c.isCompany ? c.name : ""),
-      first_name: c.isCompany ? "" : c.name,
-      is_company: c.isCompany,
+      client_type: c.isCompany ? "1" : "4",
+      company: c.isCompany ? (c.company ?? c.name) : "",
+      first_name: c.isCompany ? "" : first,
+      last_name: c.isCompany ? "" : rest.join(" "),
       vat_number: c.vatNumber ?? "",
-      tax_office: c.taxOffice ?? "", // VERIFY
+      is_client: true,
+      is_supplier: false,
       email: c.emails.map((email, i) => ({ email, primary: i === 0 })),
       phones: c.phone ? [{ number: c.phone, primary: true }] : [],
-      addresses: c.address ? [{ address: c.address, ad_type: "bill" }] : [],
+      addresses: c.address ? [{ address: c.address, country: "GR", ad_type: "bill" }] : [],
     };
     return this.toContact(await this.req(`/contacts/`, { method: "POST", body: JSON.stringify(body) }));
   }
   async createInvoice(i: CreateInvoiceInput) {
-    const inv = await this.req<{ id: string; sequence_flat?: string; number?: string }>(`/invoices/`, {
+    const inv = await this.req<{ id: string; number?: string; sequence_flat?: string }>(`/invoices/`, {
       method: "POST",
       body: JSON.stringify({
         client: i.contactId,
-        documenttype: i.documentType,
+        documenttype: i.doc.documentTypeId,
+        mydata_document_type: i.doc.mydataDocumentType,
         date: i.date,
         draft: false,
         currency_code: "EUR",
         calculator_mode: "initial",
         items: i.lines.map((l) => ({
-          product: l.productId ?? undefined,
+          product: l.productId || undefined,
           title: l.title,
+          description: l.description ?? "",
           quantity: "1",
-          unit_value: (l.netCents / 100).toFixed(2),
-          unit_total: (l.netCents / 100).toFixed(2),
-          taxes: [], // VERIFY: tax ids for 24% / 0% exemption
+          unit_value: money(l.netCents),
+          taxes: [{ tax: i.doc.taxId, auto_calculate: true }],
+          vat_exemption_category: i.doc.vatExemptionCategory || undefined,
+          accounts: [
+            {
+              mydata_classification: "income",
+              mydata_classification_category: "category1_3",
+              mydata_classification_type: i.doc.classificationType,
+              amount: money(l.netCents),
+            },
+          ],
         })),
       }),
     });
-    return { id: String(inv.id), number: inv.sequence_flat ?? inv.number ?? String(inv.id) };
+    return { id: String(inv.id), number: inv.sequence_flat || inv.number || String(inv.id) };
   }
-  async recordPayment(p: { invoiceId: string; contactId: string; amountCents: number; date: string }) {
-    // VERIFY: cash receipt endpoint and payload
+  async recordPayment(p: { invoiceId: string; contactId: string; amountCents: number; date: string; title: string }) {
     await this.req(`/cashreceipts/`, {
       method: "POST",
       body: JSON.stringify({
+        title: p.title,
         contact: p.contactId,
         date: p.date,
-        amount: (p.amountCents / 100).toFixed(2),
-        invoices: [{ invoice: p.invoiceId, amount: (p.amountCents / 100).toFixed(2) }],
+        amount: money(p.amountCents),
+        currency_code: "EUR",
+        transaction_type: "ip", // invoice payment
+        invoice_payments: [{ invoice: p.invoiceId, amount: money(p.amountCents) }],
       }),
     });
   }
-  async emailInvoice(p: { invoiceId: string; to: string[] }) {
-    // VERIFY: invoice email endpoint
+  async emailInvoice(p: { invoiceId: string; to: string[]; subject: string; message: string }) {
+    const [to, ...cc] = p.to;
+    if (!to) throw new Error("No email address for the invoice");
     await this.req(`/invoices/${p.invoiceId}/email/`, {
       method: "POST",
-      body: JSON.stringify({ recipients: p.to, attach_pdf: true }),
+      body: JSON.stringify({ to, cc, bcc: [], subject: p.subject, message: p.message, attach_pdf: true }),
     });
   }
   async listInvoices(contactId: string) {
     const data = await this.req<{ results: Record<string, unknown>[] }>(`/invoices/?client=${contactId}&page_size=50`);
     return data.results.map((r) => ({
       id: String(r.id),
-      number: String(r.sequence_flat ?? r.number ?? r.id),
+      number: String(r.sequence_flat || r.number || r.id),
       date: String(r.date),
       totalCents: Math.round(Number(r.total ?? 0) * 100),
-      paid: Number(r.amount_due ?? r.payable ?? 0) === 0,
+      paid: r.status === "paid" || Number(r.paid ?? 0) >= Number(r.payable ?? 0),
     }));
   }
   async ping() {
@@ -191,14 +226,14 @@ export class MockElorus implements ElorusApi {
     return c;
   }
   async createContact(c: NewContact) {
-    const contact = { ...c, id: `mock-${this.contacts.size + 1000}` };
+    const contact: ElorusContact = { ...c, id: `mock-${this.contacts.size + 1000}` };
     this.contacts.set(contact.id, contact);
     return contact;
   }
   async createInvoice(i: CreateInvoiceInput) {
     this.maybeFail();
     const id = `inv-${++this.seq}`;
-    const number = `${i.documentType}-${String(this.seq).padStart(4, "0")}`;
+    const number = `${i.doc.series}-${String(this.seq).padStart(4, "0")}`;
     this.invoices.push({ id, number, date: i.date, totalCents: 0, paid: false, contactId: i.contactId, lines: i.lines });
     return { id, number };
   }
@@ -206,7 +241,7 @@ export class MockElorus implements ElorusApi {
     const inv = this.invoices.find((x) => x.id === p.invoiceId);
     if (inv) Object.assign(inv, { paid: true, totalCents: p.amountCents });
   }
-  async emailInvoice(p: { invoiceId: string; to: string[] }) {
+  async emailInvoice(p: { invoiceId: string; to: string[]; subject: string; message: string }) {
     const inv = this.invoices.find((x) => x.id === p.invoiceId);
     if (inv) inv.emailedTo = p.to;
   }
@@ -249,7 +284,6 @@ export function missingInvoiceDetails(c: {
   if (!c.elorusContactId) missing.push("Elorus link");
   if (c.invoiceType === "TPY") {
     if (!c.vatNumber) missing.push("ΑΦΜ");
-    if (!c.taxOffice) missing.push("tax office");
     if (!c.address) missing.push("address");
   } else {
     if (!c.name) missing.push("name");

@@ -1,13 +1,14 @@
 "use client";
 
-import { CalendarClock, Inbox, Layers, Settings, Users } from "lucide-react";
+import { CalendarDays, Inbox, Layers, Repeat, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/", label: "Today", icon: Inbox },
-  { href: "/renewals", label: "Renewals", icon: CalendarClock },
+  { href: "/renewals", label: "Renewals", icon: Repeat },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/plans", label: "Plans", icon: Layers },
   { href: "/settings", label: "Settings", icon: Settings },

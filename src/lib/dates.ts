@@ -67,3 +67,34 @@ export function formatDateTime(d: Date, now: Date = new Date()): string {
 export function athensYear(d: Date): number {
   return Number(format(d, "yyyy", { in: inAthens }));
 }
+
+/** "2026-11" for a date, in Athens time. */
+export function athensMonthKey(d: Date): string {
+  return format(d, "yyyy-MM", { in: inAthens });
+}
+
+/** Athens day of month (1–31). */
+export function athensDayOfMonth(d: Date): number {
+  return Number(format(d, "d", { in: inAthens }));
+}
+
+/** Month keys from a start key, e.g. monthRange("2026-11", 12) → ["2026-11", …, "2027-10"]. */
+export function monthRange(startKey: string, count: number): string[] {
+  const [y, m] = startKey.split("-").map(Number);
+  return Array.from({ length: count }, (_, i) => {
+    const t = (m - 1 + i) % 12;
+    const yy = y + Math.floor((m - 1 + i) / 12);
+    return `${yy}-${String(t + 1).padStart(2, "0")}`;
+  });
+}
+
+export function monthStart(key: string): Date {
+  const [y, m] = key.split("-").map(Number);
+  return athensDay(y, m, 1);
+}
+
+export function formatMonth(key: string, locale: "el" | "en" = "en"): string {
+  return new Intl.DateTimeFormat(locale === "el" ? "el-GR" : "en-GB", { timeZone: ATHENS, month: "long", year: "numeric" }).format(
+    new Date(monthStart(key).getTime() + 12 * 3600_000),
+  );
+}

@@ -17,7 +17,7 @@ export default async function NewPackagePage({ searchParams }: PageProps<"/renew
   const clientId = typeof sp.client === "string" ? sp.client : "";
   const [clients, plans] = await Promise.all([
     db.client.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    db.plan.findMany({ where: { active: true }, orderBy: { priceNetCents: "asc" } }),
+    db.plan.findMany({ where: { active: true, kind: "hosting", priceNetCents: { gt: 0 } }, orderBy: { priceNetCents: "asc" } }),
   ]);
   const client = clientId
     ? await db.client.findUnique({ where: { id: clientId }, include: { websites: { include: { packages: { include: { package: true } } } } } })
@@ -27,7 +27,7 @@ export default async function NewPackagePage({ searchParams }: PageProps<"/renew
     return (
       <>
         <PageHeader title="New Package" />
-        <EmptyState title="Add a plan first" body="Packages are priced from a hosting plan." action={<LinkButton href="/plans" variant="default">Add a Plan</LinkButton>} />
+        <EmptyState title="Add a hosting plan first" body="Packages are priced from a hosting plan." action={<LinkButton href="/plans" variant="default">Add a Plan</LinkButton>} />
       </>
     );
   }
@@ -90,18 +90,12 @@ export default async function NewPackagePage({ searchParams }: PageProps<"/renew
                   })}
                 </fieldset>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="3. Plan" htmlFor="planId" hint="Domains that renew with the hosting are added on the package page.">
-                    <NativeSelect id="planId" name="planId" required defaultValue={(plans.find((p) => p.kind === "hosting") ?? plans[0]).id}>
-                      {(["hosting", "domain"] as const).map((kind) => (
-                        <optgroup key={kind} label={kind === "hosting" ? "Hosting" : "Domain only"}>
-                          {plans
-                            .filter((p) => p.kind === kind)
-                            .map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} · {formatEur(p.priceNetCents, "en")} net / {p.periodMonths === 24 ? "2 years" : "year"}
-                              </option>
-                            ))}
-                        </optgroup>
+                  <Field label="3. Hosting plan" htmlFor="planId" hint="Domains are added on the package page after it’s created.">
+                    <NativeSelect id="planId" name="planId" required defaultValue={plans[0].id}>
+                      {plans.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} · {formatEur(p.priceNetCents, "en")} net / year
+                        </option>
                       ))}
                     </NativeSelect>
                   </Field>

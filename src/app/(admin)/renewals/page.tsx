@@ -58,7 +58,7 @@ export default async function RenewalsPage({ searchParams }: PageProps<"/renewal
     return true;
   });
 
-  const plans = await db.plan.findMany({ where: { active: true }, orderBy: [{ kind: "asc" }, { priceNetCents: "asc" }] });
+  const plans = await db.plan.findMany({ where: { active: true, kind: "hosting", priceNetCents: { gt: 0 } }, orderBy: { priceNetCents: "asc" } });
   const planOptions = plans.map((pl) => ({
     id: pl.id,
     kind: pl.kind,

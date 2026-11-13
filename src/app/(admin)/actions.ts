@@ -206,6 +206,7 @@ export async function createPackage(_: ActionResult | null, formData: FormData):
   const start = parseAthensDate(parsed.data.startDate);
   if (!start) return { ok: false, message: "Start date is not valid" };
   const plan = await db.plan.findUniqueOrThrow({ where: { id: parsed.data.planId } });
+  if (plan.kind !== "hosting") return { ok: false, message: "Choose a hosting plan. Domains are added on the package page." };
   const expiresAt = parsed.data.expiresAt ? parseAthensDate(parsed.data.expiresAt) : addPeriod(start, plan.periodMonths);
   if (!expiresAt) return { ok: false, message: "Expiry date is not valid" };
   let customPriceNetCents: number | null = null;
@@ -229,9 +230,7 @@ export async function createPackage(_: ActionResult | null, formData: FormData):
 }
 
 const editSchema = z.object({
-  planId: z.string().min(1),
   expiresAt: z.string().min(1),
-  customPrice: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -241,17 +240,12 @@ export async function updatePackage(id: string, _: ActionResult | null, formData
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
   const expiresAt = parseAthensDate(parsed.data.expiresAt);
   if (!expiresAt) return { ok: false, message: "Expiry date is not valid" };
-  let customPriceNetCents: number | null = null;
-  if (parsed.data.customPrice) {
-    customPriceNetCents = parseEurToCents(parsed.data.customPrice);
-    if (customPriceNetCents === null) return { ok: false, message: "Custom price is not a valid amount" };
-  }
   const websiteIds = formData.getAll("websiteIds").map(String).filter(Boolean);
   if (websiteIds.length === 0) return { ok: false, message: "Keep at least one website" };
   await db.$transaction([
     db.hostingPackage.update({
       where: { id },
-      data: { planId: parsed.data.planId, expiresAt, customPriceNetCents, notes: parsed.data.notes || null },
+      data: { expiresAt, notes: parsed.data.notes || null },
     }),
     db.packageWebsite.deleteMany({ where: { packageId: id } }),
     db.packageWebsite.createMany({ data: websiteIds.map((websiteId) => ({ packageId: id, websiteId })) }),
@@ -259,6 +253,21 @@ export async function updatePackage(id: string, _: ActionResult | null, formData
   await audit(user.email, "package.updated", "HostingPackage", id, parsed.data);
   revalidatePath(`/renewals/${id}`);
   return { ok: true, message: "Package saved" };
+}
+
+/** The package's hosting plan and optional custom price. Hosting plans only. */
+export async function setPackagePlan(id: string, _: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  const plan = await db.plan.findUnique({ where: { id: String(formData.get("planId") ?? "") } });
+  if (!plan) return { ok: false, message: "Choose a hosting plan" };
+  if (plan.kind !== "hosting") return { ok: false, message: "Choose a hosting plan. Add domains under Domains." };
+  const raw = String(formData.get("customPrice") ?? "").trim();
+  const customPriceNetCents = raw ? parseEurToCents(raw) : null;
+  if (raw && customPriceNetCents === null) return { ok: false, message: "Custom price is not a valid amount, for example 120 or 120,00" };
+  await db.hostingPackage.update({ where: { id }, data: { planId: plan.id, customPriceNetCents } });
+  await audit(user.email, "package.plan", "HostingPackage", id, { plan: plan.name, customPriceNetCents });
+  revalidatePath(`/renewals/${id}`);
+  return { ok: true, message: customPriceNetCents !== null ? `Hosting: ${plan.name} at a custom €${(customPriceNetCents / 100).toFixed(2)} net` : `Hosting: ${plan.name}` };
 }
 
 // ---------------- Domains renewed with a package ----------------
@@ -315,6 +324,7 @@ export async function bulkSetPlan(_: ActionResult | null, formData: FormData): P
   if (ids.length === 0) return { ok: false, message: "Select at least one package" };
   const plan = await db.plan.findUnique({ where: { id: planId } });
   if (!plan) return { ok: false, message: "Choose a plan" };
+  if (plan.kind !== "hosting") return { ok: false, message: "Choose a hosting plan" };
   const { count } = await db.hostingPackage.updateMany({ where: { id: { in: ids } }, data: { planId: plan.id } });
   await db.auditLog.createMany({
     data: ids.map((id) => ({ actor: user.email, action: "package.plan_bulk", entity: "HostingPackage", entityId: id, data: { planId: plan.id, plan: plan.name } })),

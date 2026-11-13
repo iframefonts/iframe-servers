@@ -44,22 +44,16 @@ export function BulkPlanForm({ plans, children }: { plans: PlanOption[]; childre
           </label>
           <NativeSelect id="bulk-plan" name="planId" required defaultValue="" className="w-auto min-w-56 flex-1">
             <option value="" disabled>
-              Choose a plan…
+              Choose a hosting plan…
             </option>
-            {(["hosting", "domain"] as const).map((kind) => (
-              <optgroup key={kind} label={kind === "hosting" ? "Hosting" : "Domain only"}>
-                {plans
-                  .filter((p) => p.kind === kind)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-              </optgroup>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
             ))}
           </NativeSelect>
           <Button type="submit" disabled={pending} aria-busy={pending}>
-            {pending ? "Saving…" : "Set Plan"}
+            {pending ? "Saving…" : "Set Hosting Plan"}
           </Button>
           <Button
             type="button"

@@ -57,7 +57,7 @@ class ResendMailer implements Mailer {
     const email = applyRedirect(original, env.emailRedirectTo);
     const html = await render(email.react);
     const { data, error } = await this.client.emails.send(
-      { from: env.emailFrom, to: email.to, cc: email.cc, subject: email.subject, html },
+      { from: env.emailFrom, replyTo: env.emailReplyTo || undefined, to: email.to, cc: email.cc, subject: email.subject, html },
       email.idempotencyKey ? { idempotencyKey: email.idempotencyKey } : undefined,
     );
     if (error || !data) throw new Error(`Resend: ${error?.message ?? "no response"}`);

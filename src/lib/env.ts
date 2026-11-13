@@ -10,6 +10,8 @@ export const env = {
     .filter(Boolean),
   adminEmail: e.ADMIN_EMAIL ?? "info@iframe.gr",
   emailFrom: e.EMAIL_FROM ?? "iFRAME Billing <billing@iframe.gr>",
+  /** Where client replies go ("Details wrong? Reply to this email"). */
+  emailReplyTo: e.EMAIL_REPLY_TO ?? "info@iframe.gr",
   cronSecret: e.CRON_SECRET ?? "",
   resendKey: e.RESEND_API_KEY ?? "",
   /** Dev safety: when set, every email goes to this address instead of the real recipients. */

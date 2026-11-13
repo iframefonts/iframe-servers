@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { AdminEmail } from "@/emails/admin-email";
 import { db as defaultDb, type Db } from "@/lib/db";
 import { addPeriod, formatShortDate, toDateInput } from "@/lib/dates";
-import { getElorus, missingInvoiceDetails, type ElorusApi } from "@/lib/elorus/client";
+import { getElorus, missingInvoiceDetails, type ElorusApi, type ElorusDocumentSpec } from "@/lib/elorus/client";
 import { syncClientFromElorus } from "@/lib/elorus/sync";
 import { getMailer, type Mailer } from "@/lib/email/send";
 import { env } from "@/lib/env";
@@ -11,36 +11,68 @@ import { parseLines } from "@/lib/renewal";
 
 export const MAX_INVOICE_ATTEMPTS = 5;
 
-const periodText = (start: Date, months: number) => `${formatShortDate(start, "en")} – ${formatShortDate(addPeriod(start, months), "en")}`;
+const periodText = (start: Date, months: number, locale: "el" | "en") =>
+  `${formatShortDate(start, locale)} – ${formatShortDate(addPeriod(start, months), locale)}`;
 
-/** Invoice lines from the renewal snapshot: hosting for the period, plus each domain renewed with it. */
+const LINE = {
+  el: { hosting: (plan: string) => `Φιλοξενία ιστοσελίδας ${plan}`, domain: (d: string) => `Όνομα χώρου (domain) ${d}` },
+  en: { hosting: (plan: string) => `Web hosting ${plan}`, domain: (d: string) => `Domain name ${d}` },
+};
+
+/** Invoice lines from the renewal snapshot, in the client's language: hosting, plus each domain renewed with it. */
 export function invoiceLines(
   payment: { netCents: number; paymentRequest: { lines: unknown } | null },
   pkg: { plan: { name: string; kind: string; periodMonths: number; elorusProductId: string | null } },
   domains: string,
   periodStart: Date,
+  locale: "el" | "en" = "el",
 ) {
+  const t = LINE[locale];
+  const withSites = (title: string) => (domains ? `${title} (${domains})` : title);
   const lines = parseLines(payment.paymentRequest?.lines);
   if (!lines) {
-    return [{ title: `Web hosting ${pkg.plan.name}${domains ? ` (${domains})` : ""}, ${periodText(periodStart, pkg.plan.periodMonths)}`, netCents: payment.netCents, productId: pkg.plan.elorusProductId }];
+    return [{ title: withSites(t.hosting(pkg.plan.name)), description: periodText(periodStart, pkg.plan.periodMonths, locale), netCents: payment.netCents, productId: pkg.plan.elorusProductId }];
   }
   return lines.map((l) =>
     l.kind === "domain"
-      ? { title: `Domain name ${l.label}, ${periodText(periodStart, l.periodMonths)}`, netCents: l.netCents, productId: process.env.ELORUS_PRODUCT_DOMAIN || null }
-      : {
-          title: `${pkg.plan.kind === "domain" ? "Domain name" : "Web hosting"} ${l.label}${domains ? ` (${domains})` : ""}, ${periodText(periodStart, l.periodMonths)}`,
-          netCents: l.netCents,
-          productId: pkg.plan.elorusProductId,
-        },
+      ? { title: t.domain(l.label), description: periodText(periodStart, l.periodMonths, locale), netCents: l.netCents, productId: process.env.ELORUS_PRODUCT_DOMAIN || null }
+      : { title: withSites(t.hosting(l.label)), description: periodText(periodStart, l.periodMonths, locale), netCents: l.netCents, productId: pkg.plan.elorusProductId },
   );
 }
 
-/** Elorus document series per invoice type and VAT regime. Set the real ids once created in Elorus. */
-export function documentTypeFor(invoiceType: "TPY" | "APY", regime: "domestic" | "eu_reverse_charge" | "non_eu") {
-  if (regime === "eu_reverse_charge") return process.env.ELORUS_DOCTYPE_EU ?? "TPY-EU";
-  if (regime === "non_eu") return process.env.ELORUS_DOCTYPE_NON_EU ?? "TPY-3C";
-  return invoiceType === "TPY" ? (process.env.ELORUS_DOCTYPE_TPY ?? "TPY") : (process.env.ELORUS_DOCTYPE_APY ?? "APY");
+/**
+ * How each invoice is issued in Elorus/myDATA, per invoice type and VAT regime (confirmed on the demo org):
+ * - ΤΠΥ, domestic: myDATA 2.1, E3_561_001, 24% VAT
+ * - ΑΠΥ, individuals: myDATA 11.2, E3_561_003, 24% VAT
+ * - EU business (reverse charge): myDATA 2.2, E3_561_005, 0% VAT + exemption category
+ * - Non-EU: myDATA 2.3, E3_561_006, 0% VAT + exemption category
+ * Ids come from the Elorus organization (env). The exemption categories need the accountant's confirmation.
+ */
+export function elorusDocumentFor(invoiceType: "TPY" | "APY", regime: "domestic" | "eu_reverse_charge" | "non_eu"): ElorusDocumentSpec {
+  const e = process.env;
+  const tpy = e.ELORUS_DOCTYPE_TPY ?? "TPY";
+  if (regime === "eu_reverse_charge") {
+    return { series: "TPY-EU", documentTypeId: e.ELORUS_DOCTYPE_EU || tpy, mydataDocumentType: "2.2", classificationType: "E3_561_005", taxId: e.ELORUS_TAX_VAT0 ?? "VAT0", vatExemptionCategory: e.ELORUS_VAT_EXEMPTION_EU || undefined };
+  }
+  if (regime === "non_eu") {
+    return { series: "TPY-3C", documentTypeId: e.ELORUS_DOCTYPE_NON_EU || tpy, mydataDocumentType: "2.3", classificationType: "E3_561_006", taxId: e.ELORUS_TAX_VAT0 ?? "VAT0", vatExemptionCategory: e.ELORUS_VAT_EXEMPTION_NON_EU || undefined };
+  }
+  if (invoiceType === "APY") {
+    return { series: "APY", documentTypeId: e.ELORUS_DOCTYPE_APY ?? "APY", mydataDocumentType: "11.2", classificationType: "E3_561_003", taxId: e.ELORUS_TAX_VAT24 ?? "VAT24" };
+  }
+  return { series: "TPY", documentTypeId: tpy, mydataDocumentType: "2.1", classificationType: "E3_561_001", taxId: e.ELORUS_TAX_VAT24 ?? "VAT24" };
 }
+
+export const INVOICE_EMAIL = {
+  el: {
+    subject: (n: string, d: string) => `Τιμολόγιο ${n} · Ανανέωση φιλοξενίας ${d}`,
+    message: (d: string) => `Σας ευχαριστούμε για την ανανέωση της φιλοξενίας του ${d}. Επισυνάπτεται το παραστατικό σε PDF.\n\niFRAME Design Studio`,
+  },
+  en: {
+    subject: (n: string, d: string) => `Invoice ${n} · Hosting renewal ${d}`,
+    message: (d: string) => `Thank you for renewing the hosting for ${d}. Your invoice is attached as a PDF.\n\niFRAME Design Studio`,
+  },
+};
 
 /** Details missing in Elorus: retrying won't help, the admin has to fix the contact. */
 export class MissingDetailsError extends Error {}
@@ -85,12 +117,17 @@ export async function issueInvoice(paymentId: string, deps: Deps = {}) {
     if (!invoice.elorusInvoiceId) {
       const created = await elorus.createInvoice({
         contactId: client.elorusContactId!,
-        documentType: documentTypeFor(client.invoiceType, client.vatRegime),
+        doc: elorusDocumentFor(client.invoiceType, client.vatRegime),
         date,
-        lines: invoiceLines(payment, pkg, domains, periodStart),
-        vatRate: payment.paymentRequest?.vatRate ?? 24,
+        lines: invoiceLines(payment, pkg, domains, periodStart, client.language),
       });
-      await elorus.recordPayment({ invoiceId: created.id, contactId: client.elorusContactId!, amountCents: payment.amountCents, date });
+      await elorus.recordPayment({
+        invoiceId: created.id,
+        contactId: client.elorusContactId!,
+        amountCents: payment.amountCents,
+        date,
+        title: payment.provider === "bank_transfer" ? "Bank transfer" : "Viva card payment",
+      });
       invoice = await db.invoice.update({
         where: { id: invoice.id },
         data: { elorusInvoiceId: created.id, number: created.number, status: "issued", lastError: null },
@@ -98,7 +135,13 @@ export async function issueInvoice(paymentId: string, deps: Deps = {}) {
       });
     }
 
-    await elorus.emailInvoice({ invoiceId: invoice.elorusInvoiceId!, to: client.emails });
+    const mail = INVOICE_EMAIL[client.language];
+    await elorus.emailInvoice({
+      invoiceId: invoice.elorusInvoiceId!,
+      to: client.emails,
+      subject: mail.subject(invoice.number ?? "", domains || pkg.plan.name),
+      message: mail.message(domains || pkg.plan.name),
+    });
     invoice = await db.invoice.update({
       where: { id: invoice.id },
       data: { emailStatus: "sent", emailedAt: new Date(), lastError: null },

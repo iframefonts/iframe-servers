@@ -31,7 +31,7 @@ export const env = {
 export const mock = {
   email: !env.resendKey,
   viva: !env.viva.clientId,
-  elorus: !env.elorus.token,
+  elorus: !env.elorus.token || !env.elorus.orgId,
 };
 
 /** The simulated Viva checkout records real payments, so it never runs in production. */

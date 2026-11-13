@@ -13,7 +13,7 @@ export function NewContactForm({ existingClientId, defaults }: { existingClientI
         <Field label="Name or company" htmlFor="name">
           <Input id="name" name="name" required defaultValue={defaults?.name} autoComplete="organization" />
         </Field>
-        <Field label="Type" htmlFor="isCompany" hint="Business → ΤΠΥ invoice. Individual → ΑΠΥ receipt.">
+        <Field label="Type" htmlFor="isCompany" hint="Business → ΤΠΥ invoice. Individual → ΑΠΥ receipt. Set the ΔΟΥ in Elorus if needed.">
           <NativeSelect id="isCompany" name="isCompany" defaultValue="yes">
             <option value="yes">Business</option>
             <option value="no">Individual</option>
@@ -21,9 +21,6 @@ export function NewContactForm({ existingClientId, defaults }: { existingClientI
         </Field>
         <Field label="ΑΦΜ / VAT number" htmlFor="vatNumber">
           <Input id="vatNumber" name="vatNumber" inputMode="numeric" autoComplete="off" />
-        </Field>
-        <Field label="Tax office (ΔΟΥ)" htmlFor="taxOffice">
-          <Input id="taxOffice" name="taxOffice" />
         </Field>
         <Field label="Address" htmlFor="address">
           <Input id="address" name="address" autoComplete="street-address" />

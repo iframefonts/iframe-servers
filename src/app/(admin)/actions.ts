@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { addPeriod, parseAthensDate } from "@/lib/dates";
 import { getElorus } from "@/lib/elorus/client";
 import { cachedFields, syncClientFromElorus } from "@/lib/elorus/sync";
-import { issueInvoice } from "@/lib/invoices/issue";
+import { INVOICE_EMAIL, issueInvoice } from "@/lib/invoices/issue";
 import { afterPayment } from "@/lib/jobs";
 import { domainRe, normalizeDomain } from "@/lib/domains";
 import { parseEurToCents } from "@/lib/money";
@@ -95,7 +95,6 @@ const newContactSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   isCompany: z.enum(["yes", "no"]),
   vatNumber: z.string().trim().optional(),
-  taxOffice: z.string().trim().optional(),
   address: z.string().trim().optional(),
   email: z.email("Enter a valid email"),
   phone: z.string().trim().optional(),
@@ -107,8 +106,8 @@ export async function createElorusContact(_: ActionResult | null, formData: Form
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
   const d = parsed.data;
   const isCompany = d.isCompany === "yes";
-  if (isCompany && (!d.vatNumber || !d.taxOffice || !d.address)) {
-    return { ok: false, message: "Businesses need ΑΦΜ, tax office and address for invoices" };
+  if (isCompany && (!d.vatNumber || !d.address)) {
+    return { ok: false, message: "Businesses need ΑΦΜ and address for invoices" };
   }
   let clientId: string;
   try {
@@ -117,7 +116,6 @@ export async function createElorusContact(_: ActionResult | null, formData: Form
       company: isCompany ? d.name : undefined,
       isCompany,
       vatNumber: d.vatNumber,
-      taxOffice: d.taxOffice,
       address: d.address,
       emails: [d.email],
       phone: d.phone,
@@ -429,7 +427,14 @@ export async function resendInvoice(paymentId: string): Promise<ActionResult> {
   const p = await db.payment.findUniqueOrThrow({ where: { id: paymentId }, include: { invoice: true, package: { include: { client: true } } } });
   if (!p.invoice?.elorusInvoiceId) return { ok: false, message: "No invoice yet" };
   try {
-    await getElorus().emailInvoice({ invoiceId: p.invoice.elorusInvoiceId, to: p.package.client.emails });
+    const domains = (await db.packageWebsite.findMany({ where: { packageId: p.packageId }, include: { website: true } })).map((w) => w.website.domain).join(", ");
+    const mail = INVOICE_EMAIL[p.package.client.language];
+    await getElorus().emailInvoice({
+      invoiceId: p.invoice.elorusInvoiceId,
+      to: p.package.client.emails,
+      subject: mail.subject(p.invoice.number ?? "", domains),
+      message: mail.message(domains),
+    });
     await db.invoice.update({ where: { id: p.invoice.id }, data: { emailStatus: "sent", emailedAt: new Date() } });
     await audit(user.email, "invoice.resent", "Payment", paymentId);
     revalidatePath(`/renewals/${p.packageId}`);

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { athensDay, toDateInput } from "@/lib/dates";
+import { athensDay, formatShortDate, toDateInput } from "@/lib/dates";
 import { MockElorus } from "@/lib/elorus/client";
 import { MemoryMailer } from "@/lib/email/send";
 import { issueInvoice } from "@/lib/invoices/issue";
@@ -56,7 +56,9 @@ describe("hosting + .gr domain on the same date", () => {
     await issueInvoice(r.paymentId, { db, elorus, mailer: new MemoryMailer() });
     const lines = elorus.invoices[0].lines!;
     expect(lines.map((l) => l.netCents)).toEqual([12000, 3000]);
-    expect(lines[1].title).toMatch(/^Domain name acme-.*\.gr, 31 Dec 2026 – 31 Dec 2028$/);
+    expect(lines[0].title).toMatch(/^Φιλοξενία ιστοσελίδας Basic \(acme-.*\.gr\)$/);
+    expect(lines[1].title).toMatch(/^Όνομα χώρου \(domain\) acme-.*\.gr$/);
+    expect(lines[1].description).toBe(`${formatShortDate(athensDay(2026, 12, 31), "el")} – ${formatShortDate(athensDay(2028, 12, 31), "el")}`);
   });
 
   it("says in the reminder that the domain renews too", async () => {

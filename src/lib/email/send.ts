@@ -38,9 +38,23 @@ export class MemoryMailer implements Mailer {
   }
 }
 
+/** With EMAIL_REDIRECT_TO set, nothing reaches real clients: all mail goes to that address. */
+export function applyRedirect(email: OutgoingEmail, redirectTo: string): OutgoingEmail {
+  if (!redirectTo) return email;
+  const original = [...email.to, ...(email.cc ?? []).map((c) => `cc ${c}`)].join(", ");
+  return {
+    ...email,
+    to: [redirectTo],
+    cc: undefined,
+    subject: `[to: ${original}] ${email.subject}`,
+    idempotencyKey: email.idempotencyKey ? `redirect:${email.idempotencyKey}` : undefined,
+  };
+}
+
 class ResendMailer implements Mailer {
   private client = new Resend(env.resendKey);
-  async send(email: OutgoingEmail) {
+  async send(original: OutgoingEmail) {
+    const email = applyRedirect(original, env.emailRedirectTo);
     const html = await render(email.react);
     const { data, error } = await this.client.emails.send(
       { from: env.emailFrom, to: email.to, cc: email.cc, subject: email.subject, html },

@@ -42,3 +42,13 @@ describe("sheet import parser", () => {
     expect(rows[1].note).toMatch(/domain registration/);
   });
 });
+
+describe("email redirect (dev safety)", () => {
+  it("sends everything to the redirect address and keeps the real recipients in the subject", async () => {
+    const { applyRedirect } = await import("@/lib/email/send");
+    const out = applyRedirect({ to: ["eleni@mallatou.gr"], cc: ["info@iframe.gr"], subject: "Hi", react: null as never, idempotencyKey: "k" }, "dev@iframe.gr");
+    expect(out).toMatchObject({ to: ["dev@iframe.gr"], cc: undefined, subject: "[to: eleni@mallatou.gr, cc info@iframe.gr] Hi", idempotencyKey: "redirect:k" });
+    const same = applyRedirect({ to: ["a@b.gr"], subject: "Hi", react: null as never }, "");
+    expect(same.to).toEqual(["a@b.gr"]);
+  });
+});

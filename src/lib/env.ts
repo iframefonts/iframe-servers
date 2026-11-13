@@ -12,6 +12,8 @@ export const env = {
   emailFrom: e.EMAIL_FROM ?? "iFRAME Billing <billing@iframe.gr>",
   cronSecret: e.CRON_SECRET ?? "",
   resendKey: e.RESEND_API_KEY ?? "",
+  /** Dev safety: when set, every email goes to this address instead of the real recipients. */
+  emailRedirectTo: e.EMAIL_REDIRECT_TO ?? "",
   viva: {
     env: (e.VIVA_ENV ?? "demo") as "demo" | "live",
     clientId: e.VIVA_CLIENT_ID ?? "",

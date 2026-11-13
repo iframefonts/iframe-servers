@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx scripts/seed.ts",
     "import:sheet": "tsx scripts/import-sheet.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "email:test": "tsx scripts/test-email.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

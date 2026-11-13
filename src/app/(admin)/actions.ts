@@ -307,6 +307,23 @@ export async function removePackageDomain(domainId: string): Promise<ActionResul
 
 const isUnique = (e: unknown) => typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 
+/** Bulk action on the Renewals list: one plan for many packages. Undoable, so no confirm. */
+export async function bulkSetPlan(_: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  const ids = [...new Set(formData.getAll("ids").map(String).filter(Boolean))];
+  const planId = String(formData.get("planId") ?? "");
+  if (ids.length === 0) return { ok: false, message: "Select at least one package" };
+  const plan = await db.plan.findUnique({ where: { id: planId } });
+  if (!plan) return { ok: false, message: "Choose a plan" };
+  const { count } = await db.hostingPackage.updateMany({ where: { id: { in: ids } }, data: { planId: plan.id } });
+  await db.auditLog.createMany({
+    data: ids.map((id) => ({ actor: user.email, action: "package.plan_bulk", entity: "HostingPackage", entityId: id, data: { planId: plan.id, plan: plan.name } })),
+  });
+  revalidatePath("/renewals");
+  revalidatePath("/");
+  return { ok: true, message: `${count} package${count === 1 ? "" : "s"} now on ${plan.name}` };
+}
+
 export async function setReminders(id: string, enabled: boolean): Promise<ActionResult> {
   const user = await requireUser();
   await db.hostingPackage.update({ where: { id }, data: { remindersEnabled: enabled } });

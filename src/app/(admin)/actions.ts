@@ -214,17 +214,36 @@ export async function createPackage(_: ActionResult | null, formData: FormData):
     customPriceNetCents = parseEurToCents(parsed.data.customPrice);
     if (customPriceNetCents === null) return { ok: false, message: "Custom price is not a valid amount" };
   }
-  const pkg = await db.hostingPackage.create({
-    data: {
-      clientId: parsed.data.clientId,
-      planId: plan.id,
-      startDate: start,
-      expiresAt,
-      customPriceNetCents,
-      notes: parsed.data.notes || null,
-      websites: { create: websiteIds.map((websiteId) => ({ websiteId })) },
-    },
-  });
+  // Optional domain renewed with the hosting, on its own domain plan.
+  let domain: { websiteId: string; planId: string; customPriceNetCents: number | null; expiresAt: Date } | null = null;
+  if (formData.get("withDomain")) {
+    const domainPlan = await db.plan.findUnique({ where: { id: String(formData.get("domainPlanId") ?? "") } });
+    if (!domainPlan || domainPlan.kind !== "domain") return { ok: false, message: "Choose a domain plan" };
+    const site = await db.website.findFirst({ where: { id: String(formData.get("domainWebsiteId") ?? ""), clientId: parsed.data.clientId } });
+    if (!site) return { ok: false, message: "Choose the domain" };
+    const rawPrice = String(formData.get("domainCustomPrice") ?? "").trim();
+    const domainPrice = rawPrice ? parseEurToCents(rawPrice) : null;
+    if (rawPrice && domainPrice === null) return { ok: false, message: "Domain price is not a valid amount" };
+    const second = formData.get("domainFirstRenewal") === "next";
+    domain = { websiteId: site.id, planId: domainPlan.id, customPriceNetCents: domainPrice, expiresAt: second ? addPeriod(expiresAt, plan.periodMonths) : expiresAt };
+  }
+  let pkg;
+  try {
+    pkg = await db.hostingPackage.create({
+      data: {
+        clientId: parsed.data.clientId,
+        planId: plan.id,
+        startDate: start,
+        expiresAt,
+        customPriceNetCents,
+        notes: parsed.data.notes || null,
+        websites: { create: websiteIds.map((websiteId) => ({ websiteId })) },
+        ...(domain ? { domains: { create: [domain] } } : {}),
+      },
+    });
+  } catch (e) {
+    return { ok: false, message: isUnique(e) ? "That domain already renews with another package" : errMsg(e) };
+  }
   await audit(user.email, "package.created", "HostingPackage", pkg.id);
   redirect(`/renewals/${pkg.id}`);
 }

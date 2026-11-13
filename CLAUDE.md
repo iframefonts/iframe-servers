@@ -33,6 +33,11 @@ Stack: Next.js 16 App Router, TypeScript, Prisma 7 (driver adapter `@prisma/adap
 - `pnpm db:migrate` (deploy migrations) · `pnpm db:seed` (demo data, local only) · `pnpm import:sheet <file.html> [--dry-run]`
 - New migration: edit `prisma/schema.prisma`, then `npx prisma migrate dev --name <name>` (interactive terminal) or `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` into a new folder.
 
+## Workflow
+
+- Never commit to `main`: it deploys straight to production (https://webhosting.iframe.gr).
+- Every change: new branch from an up-to-date `main` → commits → `git push -u origin <branch>` → `gh pr create`. Vercel posts a preview link on the PR; check it, then merge.
+
 ## Deploy
 
 GitHub (github.com/iframefonts/iframe-servers) → Vercel team “iframe” (account info@iframe.gr, not Sinqlo), main = production, at **https://webhosting.iframe.gr**. iframe.gr DNS is on Cloudflare (not Plesk). The app's records (Vercel CNAME, Resend DKIM/send/rsend) are in the Cloudflare zone, DNS only. Emails come from billing@webhosting.iframe.gr (no mailbox), with replies going to info@iframe.gr. Cron in `vercel.json` (07:00 UTC reminders, 01:00 UTC Elorus sync). Database: Neon via the Vercel Marketplace.

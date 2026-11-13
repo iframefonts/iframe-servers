@@ -1,5 +1,6 @@
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
+import { BulkPlanForm, SelectAllBox } from "@/components/bulk-plan";
 import { LinkButton } from "@/components/link-button";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -57,6 +58,13 @@ export default async function RenewalsPage({ searchParams }: PageProps<"/renewal
     return true;
   });
 
+  const plans = await db.plan.findMany({ where: { active: true }, orderBy: [{ kind: "asc" }, { priceNetCents: "asc" }] });
+  const planOptions = plans.map((pl) => ({
+    id: pl.id,
+    kind: pl.kind,
+    label: `${pl.name} · ${formatEur(pl.priceNetCents, "en")} net / ${pl.periodMonths === 24 ? "2 years" : "year"}`,
+  }));
+
   const href = (f: string) => `/renewals?${new URLSearchParams({ ...(f !== "all" ? { filter: f } : {}), ...(q ? { q } : {}) })}`;
 
   return (
@@ -101,10 +109,14 @@ export default async function RenewalsPage({ searchParams }: PageProps<"/renewal
           action={filter === "all" && !q ? <LinkButton href="/renewals/new" variant="default">New Package</LinkButton> : undefined}
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border bg-card">
+        <BulkPlanForm plans={planOptions}>
+        <div className="overflow-x-auto rounded-xl border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <SelectAllBox />
+                </TableHead>
                 <TableHead>Websites</TableHead>
                 <TableHead className="hidden md:table-cell">Client</TableHead>
                 <TableHead className="hidden lg:table-cell">Plan</TableHead>
@@ -120,6 +132,15 @@ export default async function RenewalsPage({ searchParams }: PageProps<"/renewal
                 const amount = amountsFor(linesNet(lines), p.client.vatRegime).amountCents;
                 return (
                   <TableRow key={p.id} className="relative">
+                    <TableCell className="w-10">
+                      <input
+                        type="checkbox"
+                        name="ids"
+                        value={p.id}
+                        aria-label={`Select ${domainsOf(p)}`}
+                        className="relative z-10 size-4 accent-primary"
+                      />
+                    </TableCell>
                     <TableCell className="max-w-[260px] font-medium">
                       <Link href={`/renewals/${p.id}`} className="block truncate after:absolute after:inset-0 focus-visible:outline-none">
                         {domainsOf(p)}
@@ -138,9 +159,9 @@ export default async function RenewalsPage({ searchParams }: PageProps<"/renewal
                     <TableCell className="text-right num">{formatEur(amount, "en")}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        <StatusBadge status={st.primary} />
+                        <StatusBadge status={st.primary} compact />
                         {st.flags.slice(0, 1).map((f) => (
-                          <StatusBadge key={f.label} status={f} />
+                          <StatusBadge key={f.label} status={f} compact />
                         ))}
                       </div>
                     </TableCell>
@@ -150,6 +171,7 @@ export default async function RenewalsPage({ searchParams }: PageProps<"/renewal
             </TableBody>
           </Table>
         </div>
+        </BulkPlanForm>
       )}
       <p className="mt-3 text-[13px] text-muted-foreground">
         {pkgs.length} package{pkgs.length === 1 ? "" : "s"}. Amounts include VAT where it applies.

@@ -23,7 +23,8 @@ const TONES: Record<Tone, string> = {
   muted: "bg-transparent text-muted-foreground border-border",
 };
 
-export function StatusBadge({ status, className }: { status: Status; className?: string }) {
+/** `compact` hides the inline detail (kept as a tooltip) for dense tables. */
+export function StatusBadge({ status, className, compact }: { status: Status; className?: string; compact?: boolean }) {
   const Icon = ICONS[status.icon];
   return (
     <span
@@ -36,7 +37,7 @@ export function StatusBadge({ status, className }: { status: Status; className?:
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
       {status.label}
-      {status.detail && <span className="font-normal opacity-80">· {status.detail}</span>}
+      {status.detail && !compact && <span className="font-normal opacity-80">· {status.detail}</span>}
     </span>
   );
 }

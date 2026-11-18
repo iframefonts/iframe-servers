@@ -63,14 +63,11 @@ const BASE = "https://api.elorus.com/v1.2";
 const money = (cents: number) => (cents / 100).toFixed(2);
 
 export class HttpElorus implements ElorusApi {
-  /** `token` overrides ELORUS_TOKEN (the Finance sync can use its own key). */
-  constructor(private readonly token: string = env.elorus.token) {}
-
   private async req<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
     const res = await fetch(`${BASE}${path}`, {
       ...init,
       headers: {
-        Authorization: `Token ${this.token}`,
+        Authorization: `Token ${env.elorus.token}`,
         "X-Elorus-Organization": env.elorus.orgId,
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -202,10 +199,6 @@ export class HttpElorus implements ElorusApi {
   async ping() {
     await this.req(`/contacts/?page_size=1`);
     return true;
-  }
-  /** Read-only GET for the Finance sync (path relative to /v1.2, e.g. "/bills/?page=2"). */
-  async get<T>(path: string): Promise<T> {
-    return this.req<T>(path);
   }
 }
 

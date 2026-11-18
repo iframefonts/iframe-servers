@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, ChartColumnBig, Inbox, Layers, Repeat, Settings, Users } from "lucide-react";
+import { CalendarDays, Inbox, Layers, Repeat, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -11,7 +11,6 @@ const ITEMS = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/plans", label: "Plans", icon: Layers },
-  { href: "/finance", label: "Finance", icon: ChartColumnBig },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

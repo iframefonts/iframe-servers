@@ -13,8 +13,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "import:sheet": "tsx scripts/import-sheet.ts",
     "postinstall": "prisma generate",
-    "email:test": "tsx scripts/test-email.ts",
-    "finance:sync": "tsx scripts/sync-finance.ts"
+    "email:test": "tsx scripts/test-email.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

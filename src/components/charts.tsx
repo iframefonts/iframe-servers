@@ -13,39 +13,24 @@ const fmt = (cents: number) =>
 
 export type StackedDatum = { label: string; short: string; values: number[] };
 
-/**
- * Vertical bars, stacked (net + VAT) or `grouped` side by side (income vs outgoings).
- * One y-axis, 4px rounded data-ends, 2px gaps. Negative values draw nothing.
- */
-export function StackedBars({
-  data,
-  series,
-  height = 220,
-  grouped = false,
-  label,
-}: {
-  data: StackedDatum[];
-  series: string[];
-  height?: number;
-  grouped?: boolean;
-  label?: string;
-}) {
+/** Vertical bars, optionally stacked (net + VAT). One y-axis, 4px rounded data-ends, 2px gaps. */
+export function StackedBars({ data, series, height = 220 }: { data: StackedDatum[]; series: string[]; height?: number }) {
   const [hover, setHover] = useState<number | null>(null);
-  const max = Math.max(1, ...data.map((d) => (grouped ? Math.max(...d.values) : d.values.reduce((a, b) => a + Math.max(0, b), 0))));
+  const max = Math.max(1, ...data.map((d) => d.values.reduce((a, b) => a + b, 0)));
   const nice = niceMax(max);
   const W = 640;
-  const padL = 60;
+  const padL = 44;
   const padB = 22;
   const innerH = height - padB - 8;
   const slot = (W - padL) / data.length;
-  const barW = grouped ? Math.min(14, (slot * 0.7) / series.length) : Math.min(28, slot * 0.6);
+  const barW = Math.min(28, slot * 0.6);
   const y = (v: number) => (v / nice) * innerH;
   const ticks = [0, 0.5, 1].map((f) => f * nice);
 
   return (
     <div className="relative">
       {series.length > 1 && <Legend series={series} />}
-      <svg viewBox={`0 0 ${W} ${height}`} className="w-full" role="img" aria-label={label ?? `${series.join(" and ")} per month`} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${height}`} className="w-full" role="img" aria-label={`${series.join(" and ")} per month`} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={padL} x2={W} y1={8 + innerH - y(t)} y2={8 + innerH - y(t)} stroke="var(--border)" strokeWidth={1} />
@@ -63,14 +48,7 @@ export function StackedBars({
               {/* hit target bigger than the mark */}
               <rect x={padL + i * slot} y={0} width={slot} height={8 + innerH} fill="transparent" />
               {hover === i && <rect x={padL + i * slot + 2} y={8} width={slot - 4} height={innerH} fill="var(--foreground)" opacity={0.04} rx={4} />}
-              {grouped &&
-                d.values.map((v, k) => {
-                  if (v <= 0) return null;
-                  const gx = padL + i * slot + (slot - barW * series.length - 2 * (series.length - 1)) / 2 + k * (barW + 2);
-                  const h = Math.max(1, y(v));
-                  return <path key={k} d={roundedTop(gx, 8 + innerH - h, barW, h, 4)} fill={SERIES[k]} />;
-                })}
-              {!grouped && d.values.map((v, k) => {
+              {d.values.map((v, k) => {
                 if (v <= 0) return null;
                 const h = Math.max(1, y(v) - (acc > 0 ? 2 : 0)); // 2px surface gap between stacked segments
                 const top = 8 + innerH - y(acc) - y(v);
@@ -97,7 +75,7 @@ export function StackedBars({
               {s}: {fmt(data[hover].values[k])}
             </p>
           ))}
-          {series.length > 1 && !grouped && <p className="mt-0.5 border-t pt-0.5 num">Total: {fmt(data[hover].values.reduce((a, b) => a + b, 0))}</p>}
+          {series.length > 1 && <p className="mt-0.5 border-t pt-0.5 num">Total: {fmt(data[hover].values.reduce((a, b) => a + b, 0))}</p>}
         </div>
       )}
     </div>
@@ -110,7 +88,7 @@ export function HBars({ data }: { data: { label: string; value: number }[] }) {
   return (
     <ul className="space-y-2.5">
       {data.map((d) => (
-        <li key={d.label} className="grid grid-cols-[minmax(80px,200px)_1fr_auto] items-center gap-3 text-sm" title={`${d.label}: ${fmt(d.value)}`}>
+        <li key={d.label} className="grid grid-cols-[minmax(80px,140px)_1fr_auto] items-center gap-3 text-sm" title={`${d.label}: ${fmt(d.value)}`}>
           <span className="truncate">{d.label}</span>
           <span className="h-3 rounded-r-[4px] bg-[var(--series-1)]" style={{ width: `${Math.max(1, (d.value / max) * 100)}%` }} aria-hidden />
           <span className="num text-muted-foreground">{fmt(d.value)}</span>

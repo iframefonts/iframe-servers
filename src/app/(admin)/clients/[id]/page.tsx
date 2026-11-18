@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { addWebsite, refreshClient, removeWebsite, saveClientExtras } from "@/app/(admin)/actions";
+import { addWebsite, deleteClient, refreshClient, removeWebsite, saveClientExtras } from "@/app/(admin)/actions";
 import { ActionButton } from "@/components/action-button";
 import { ElorusSearch } from "@/components/elorus-search";
 import { ActionForm, Field, NativeSelect } from "@/components/form-bits";
@@ -11,6 +11,7 @@ import { PageHeader, Section } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { clientDeletion } from "@/lib/client-deletion";
 import { db } from "@/lib/db";
 import { formatDateTime, formatShortDate } from "@/lib/dates";
 import { getElorus, missingInvoiceDetails } from "@/lib/elorus/client";
@@ -33,6 +34,14 @@ export default async function ClientPage({ params }: PageProps<"/clients/[id]">)
   });
   if (!client) notFound();
   const missing = missingInvoiceDetails(client);
+  const deletion = await clientDeletion(client.id);
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const deletionSummary = [
+    "the client",
+    plural(deletion.websites, "website"),
+    plural(deletion.packages, "hosting package"),
+    `${plural(deletion.payments, "payment record")} with their reminders and payment links`,
+  ].join(", ");
   const linked = Boolean(client.elorusContactId);
 
   let elorusInvoices: Awaited<ReturnType<ReturnType<typeof getElorus>["listInvoices"]>> | null = null;
@@ -222,6 +231,39 @@ export default async function ClientPage({ params }: PageProps<"/clients/[id]">)
           )}
         </Section>
       )}
+
+      <Section title="Delete client" description="Removes this client from this app only. Nothing changes in Elorus or Viva.">
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card px-5 py-4">
+          {deletion.allowed ? (
+            <>
+              <p className="flex-1 text-sm text-muted-foreground">{deletionSummary}.</p>
+              <ActionButton
+                action={deleteClient.bind(null, client.id)}
+                variant="destructive"
+                pendingLabel="Deleting…"
+                confirm={{
+                  title: `Delete ${client.name}?`,
+                  body: (
+                    <p>
+                      This permanently deletes {deletionSummary} from this app. Renewal reminders for it stop. The Elorus contact,
+                      its invoices and any Viva transactions stay as they are. This can&apos;t be undone.
+                    </p>
+                  ),
+                  confirmLabel: "Delete Client",
+                  destructive: true,
+                }}
+              >
+                Delete Client
+              </ActionButton>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This client can&apos;t be deleted: {deletion.issuedInvoices} invoice{deletion.issuedInvoices === 1 ? "" : "s"} issued in Elorus
+              belong to it, and their records have to stay.
+            </p>
+          )}
+        </div>
+      </Section>
     </>
   );
 }

@@ -9,6 +9,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except public pay pages, auth, APIs (webhooks, cron, inngest) and static files.
-  matcher: ["/((?!pay|login|auth|api|_next|favicon.ico|.*\\.).*)"],
+  // Everything except public pay and legal pages, auth, APIs (webhooks, cron, inngest) and static files.
+  matcher: ["/((?!pay|terms|privacy|login|auth|api|_next|favicon.ico|.*\\.).*)"],
 };

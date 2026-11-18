@@ -1,6 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { company } from "@/lib/company";
 import type { Locale } from "@/lib/i18n";
+
+/** 44px hit target on client pages. */
+const footerLink = "inline-flex min-h-11 items-center underline-offset-4 hover:text-foreground hover:underline";
 
 /** Client-facing frame: restrained branding that defers to the content (HIG › Branding). */
 export function PayShell({ locale, children, langHref }: { locale: Locale; children: ReactNode; langHref?: (l: Locale) => string }) {
@@ -24,7 +28,29 @@ export function PayShell({ locale, children, langHref }: { locale: Locale; child
         )}
       </header>
       <main className="mx-auto w-full max-w-lg flex-1 px-4 py-6 sm:py-10">{children}</main>
-      <footer className="mx-auto w-full max-w-lg px-4 pb-8 text-[13px] text-muted-foreground">iFRAME Design Studio · info@iframe.gr</footer>
+      <footer className="mx-auto w-full max-w-lg px-4 pb-8 text-[13px] text-muted-foreground">
+        <p>
+          {company.name} · {company.legalName}
+        </p>
+        <p className="num">
+          {locale === "el" ? "ΑΦΜ" : "VAT no."} {company.vatNumber} · {locale === "el" ? "ΓΕΜΗ" : "GEMI"} {company.gemi}
+        </p>
+        <p>{company.address}</p>
+        <nav aria-label={locale === "el" ? "Επικοινωνία και όροι" : "Contact and terms"} className="mt-1 flex flex-wrap gap-x-4">
+          <a href={`mailto:${company.email}`} className={footerLink}>
+            {company.email}
+          </a>
+          <a href={company.phone.href} className={`${footerLink} num`}>
+            {company.phone.display}
+          </a>
+          <Link href={`/terms?lang=${locale}`} className={footerLink}>
+            {locale === "el" ? "Όροι" : "Terms"}
+          </Link>
+          <Link href={`/privacy?lang=${locale}`} className={footerLink}>
+            {locale === "el" ? "Απόρρητο" : "Privacy"}
+          </Link>
+        </nav>
+      </footer>
     </div>
   );
 }

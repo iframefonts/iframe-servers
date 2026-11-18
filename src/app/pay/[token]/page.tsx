@@ -1,7 +1,9 @@
 import { Lock } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PayMessage, PayShell } from "@/components/pay-shell";
 import { Button } from "@/components/ui/button";
+import { VivaLogo } from "@/components/viva-logo";
 import { addPeriod, formatDate } from "@/lib/dates";
 import { t } from "@/lib/i18n";
 import { formatEur } from "@/lib/money";
@@ -90,14 +92,23 @@ export default async function PayPage({ params, searchParams }: PageProps<"/pay/
 
         <form action={`/pay/${token}/checkout`} method="post" className="mt-5">
           <input type="hidden" name="lang" value={locale} />
+          <p className="mb-3 text-[13px] text-muted-foreground">
+            {s.consent[0]}
+            <Link href={`/terms?lang=${locale}`} className="text-foreground underline underline-offset-4">
+              {s.consent[1]}
+            </Link>
+            {s.consent[2]}
+          </p>
           <Button type="submit" size="lg" className="h-12 w-full text-[17px]">
             {s.payByCard(amount)}
           </Button>
         </form>
-        <p className="mt-3 flex items-start gap-2 text-[13px] text-muted-foreground">
-          <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          {s.secure}
+        <p className="mt-4 flex items-center justify-center gap-2 text-[13px] text-muted-foreground">
+          <Lock className="size-3.5 shrink-0" aria-hidden />
+          {s.securedBy}
+          <VivaLogo className="h-[14px] w-[78px] shrink-0 text-foreground" />
         </p>
+        <p className="mt-1 text-center text-[13px] text-muted-foreground">{s.secure}</p>
       </section>
 
       <section className="mt-4 rounded-2xl border p-5 text-[15px]">

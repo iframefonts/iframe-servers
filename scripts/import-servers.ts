@@ -20,7 +20,7 @@ import { domainRe, normalizeDomain } from "../src/lib/domains";
 /** Second domains whose name differs from the site they belong to. */
 const ATTACH: Record<string, string> = { "ledadecoshop.com": "ledadeco.com" };
 /** Old entries misspelled beyond what the automatic rules catch: stored name → server domain. */
-const RENAME: Record<string, string> = { ioanninaphsycology: "ioanninapsychology.gr" };
+const RENAME: Record<string, string> = { ioanninaphsycology: "ioanninapsychology.gr", geoplan: "mygeoplan.com" };
 
 export type ServerDomain = { domain: string; server: string | null; disabled: boolean };
 

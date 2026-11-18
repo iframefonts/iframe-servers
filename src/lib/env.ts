@@ -24,7 +24,12 @@ export const env = {
     merchantId: e.VIVA_MERCHANT_ID ?? "",
     apiKey: e.VIVA_API_KEY ?? "",
   },
-  elorus: { token: e.ELORUS_TOKEN ?? "", orgId: e.ELORUS_ORG_ID ?? "" },
+  elorus: {
+    token: e.ELORUS_TOKEN ?? "",
+    orgId: e.ELORUS_ORG_ID ?? "",
+    /** Optional second API key (another Elorus user) for the Finance sync, so it never uses invoicing's daily quota. */
+    financeToken: e.ELORUS_FINANCE_TOKEN ?? "",
+  },
   inngestEnabled: Boolean(e.INNGEST_EVENT_KEY || e.INNGEST_DEV),
 };
 

@@ -62,7 +62,7 @@ export interface ElorusApi {
 const BASE = "https://api.elorus.com/v1.2";
 const money = (cents: number) => (cents / 100).toFixed(2);
 
-class HttpElorus implements ElorusApi {
+export class HttpElorus implements ElorusApi {
   private async req<T>(path: string, init: RequestInit = {}, attempt = 0): Promise<T> {
     const res = await fetch(`${BASE}${path}`, {
       ...init,
@@ -182,8 +182,10 @@ class HttpElorus implements ElorusApi {
     });
   }
   async listInvoices(contactId: string) {
+    // Elorus ignores `client=` for an id it doesn't recognize and returns the whole organization's invoices.
+    if (!/^\d+$/.test(contactId)) return [];
     const data = await this.req<{ results: Record<string, unknown>[] }>(`/invoices/?client=${contactId}&page_size=50`);
-    return data.results.map((r) => ({
+    return data.results.filter((r) => String(r.client) === contactId).map((r) => ({
       id: String(r.id),
       number: String(r.sequence_flat || r.number || r.id),
       date: String(r.date),

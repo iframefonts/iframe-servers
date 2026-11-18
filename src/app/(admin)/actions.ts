@@ -488,3 +488,66 @@ export async function runRemindersNow(): Promise<ActionResult> {
     message: `Sent ${s.sent} reminder${s.sent === 1 ? "" : "s"}, ${s.failed} failed, ${s.expired} marked expired, ${s.overdueAlerts} overdue alert${s.overdueAlerts === 1 ? "" : "s"}`,
   };
 }
+
+// ---------------- Finance ----------------
+
+export async function syncFinanceNow(): Promise<ActionResult> {
+  const user = await requireUser();
+  const { runFinanceSync } = await import("@/lib/finance/sync");
+  try {
+    const r = await runFinanceSync(user.email);
+    revalidatePath("/finance");
+    if ("skipped" in r)
+      return {
+        ok: false,
+        message:
+          r.skipped === "throttled"
+            ? "Elorus limited requests in the last 24 hours, so Finance isn't syncing until then. Invoicing keeps its quota."
+            : `Finance has used its Elorus requests for today (${r.requestsLeft} left). It syncs again tonight.`,
+      };
+    if (r.throttled) return { ok: false, message: `Read ${r.detailed} documents, then Elorus limited requests. Finance pauses for 24 hours so invoicing keeps its quota.` };
+    return {
+      ok: true,
+      message:
+        r.remaining > 0
+          ? `Read ${r.detailed} documents; ${r.remaining} left for the next nights`
+          : `Up to date: ${r.documents} documents from Elorus${r.detailed ? ` (${r.detailed} read in full)` : ""}`,
+    };
+  } catch (err) {
+    return { ok: false, message: `Elorus sync failed: ${errMsg(err)}` };
+  }
+}
+
+const ruleSchema = z.object({
+  pattern: z.string().trim().min(2, "Enter at least 2 characters to match"),
+  category: z.string().trim().min(1, "Category is required").max(40, "Keep the category under 40 characters"),
+  position: z.coerce.number().int().min(0).optional(),
+});
+
+export async function addCategoryRule(_: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = ruleSchema.safeParse({ pattern: formData.get("pattern"), category: formData.get("category"), position: formData.get("position") || undefined });
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  const last = await db.categoryRule.aggregate({ _max: { position: true } });
+  const rule = await db.categoryRule.create({
+    data: { pattern: parsed.data.pattern, category: parsed.data.category, position: parsed.data.position ?? (last._max.position ?? 0) + 10 },
+  });
+  await audit(user.email, "category_rule.add", "CategoryRule", rule.id, parsed.data);
+  const { recategorize } = await import("@/lib/finance/sync");
+  const { changed } = await recategorize();
+  revalidatePath("/settings");
+  revalidatePath("/finance");
+  return { ok: true, message: `Rule added; ${changed} invoice line${changed === 1 ? "" : "s"} moved to a new category` };
+}
+
+export async function deleteCategoryRule(id: string): Promise<ActionResult> {
+  const user = await requireUser();
+  const rule = await db.categoryRule.delete({ where: { id } }).catch(() => null);
+  if (!rule) return { ok: false, message: "That rule was already removed" };
+  await audit(user.email, "category_rule.delete", "CategoryRule", id, { pattern: rule.pattern, category: rule.category });
+  const { recategorize } = await import("@/lib/finance/sync");
+  const { changed } = await recategorize();
+  revalidatePath("/settings");
+  revalidatePath("/finance");
+  return { ok: true, message: `Removed "${rule.pattern}"; ${changed} line${changed === 1 ? "" : "s"} re-categorised` };
+}

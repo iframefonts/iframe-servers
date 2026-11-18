@@ -1,5 +1,8 @@
-import { runRemindersNow } from "@/app/(admin)/actions";
+import { addCategoryRule, deleteCategoryRule, runRemindersNow } from "@/app/(admin)/actions";
 import { ActionButton } from "@/components/action-button";
+import { ActionForm, Field } from "@/components/form-bits";
+import { Input } from "@/components/ui/input";
+import { db } from "@/lib/db";
 import { PageHeader, Section } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { getElorus } from "@/lib/elorus/client";
@@ -19,9 +22,10 @@ const badge = (s: "ok" | "mock" | "error" | "off"): Status =>
         : { label: "Not responding", tone: "action", icon: "alert" };
 
 export default async function SettingsPage() {
-  const [pay, elorus] = await Promise.all([
+  const [pay, elorus, rules] = await Promise.all([
     providerHealth(),
     mock.elorus ? Promise.resolve("mock" as const) : getElorus().ping().then(() => "ok" as const, () => "error" as const),
+    db.categoryRule.findMany({ orderBy: [{ position: "asc" }, { createdAt: "asc" }] }),
   ]);
   const checks = [
     { name: "Viva Smart Checkout", status: pay.viva, note: mock.viva ? "Add VIVA_CLIENT_ID and VIVA_CLIENT_SECRET (demo first)." : `${env.viva.env} environment` },
@@ -86,6 +90,51 @@ export default async function SettingsPage() {
               </li>
             ))}
           </ul>
+        </Section>
+      </div>
+
+      <div id="categories" className="scroll-mt-6">
+        <Section
+          title="Finance categories"
+          description="How invoice lines are grouped on the Finance page. Each line takes the first rule (top to bottom) whose text appears in its Elorus product or its description; case and accents don't matter. No match: the Elorus product name, else Other."
+        >
+          <div className="rounded-xl border bg-card">
+            {rules.length === 0 ? (
+              <p className="px-5 py-4 text-sm text-muted-foreground">No rules yet. Every line is grouped by its Elorus product, or Other.</p>
+            ) : (
+              <ul className="divide-y">
+                {rules.map((r) => (
+                  <li key={r.id} className="flex flex-wrap items-center gap-3 px-5 py-2 text-sm">
+                    <span className="w-10 text-right text-muted-foreground num">{r.position}</span>
+                    <span className="min-w-0 flex-1">
+                      Contains <span className="font-medium">“{r.pattern}”</span> → {r.category}
+                    </span>
+                    <ActionButton action={deleteCategoryRule.bind(null, r.id)} variant="ghost" size="sm" pendingLabel="Removing…">
+                      Remove
+                    </ActionButton>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <ActionForm action={addCategoryRule} submitLabel="Add Rule" resetOnSuccess className="border-t p-5">
+              <div className="grid gap-3 sm:grid-cols-[1fr_1fr_120px]">
+                <Field label="If the line contains" htmlFor="rule-pattern">
+                  <Input id="rule-pattern" name="pattern" placeholder="e.g. λογότυπ" required />
+                </Field>
+                <Field label="Category" htmlFor="rule-category">
+                  <Input id="rule-category" name="category" placeholder="e.g. Design" required list="rule-categories" />
+                  <datalist id="rule-categories">
+                    {[...new Set(rules.map((r) => r.category))].map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                </Field>
+                <Field label="Order" htmlFor="rule-position" hint="Lower runs first">
+                  <Input id="rule-position" name="position" type="number" min={0} placeholder="Last" inputMode="numeric" />
+                </Field>
+              </div>
+            </ActionForm>
+          </div>
         </Section>
       </div>
 

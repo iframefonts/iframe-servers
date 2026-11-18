@@ -31,3 +31,12 @@ describe("HttpElorus.listInvoices", () => {
     expect(list.map((i) => i.id)).toEqual(["1"]);
   });
 });
+
+describe("HttpElorus throttling", () => {
+  it("fails at once when Elorus says the daily quota is used up, instead of waiting hours", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ detail: "Request was throttled. Expected available in 80488 seconds." }), { status: 429, headers: { "retry-after": "80488" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(new HttpElorus().listInvoices("111")).rejects.toThrow(/429/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

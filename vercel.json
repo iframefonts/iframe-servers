@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/sync",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/finance",
+      "schedule": "30 1 * * *"
     }
   ]
 }

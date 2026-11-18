@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx scripts/seed.ts",
     "import:sheet": "tsx scripts/import-sheet.ts",
+    "import:servers": "tsx scripts/import-servers.ts",
     "postinstall": "prisma generate",
     "email:test": "tsx scripts/test-email.ts"
   },

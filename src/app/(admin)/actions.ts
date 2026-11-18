@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { addPeriod, parseAthensDate } from "@/lib/dates";
 import { getElorus } from "@/lib/elorus/client";
 import { cachedFields, syncClientFromElorus } from "@/lib/elorus/sync";
-import { INVOICE_EMAIL, issueInvoice } from "@/lib/invoices/issue";
+import { invoiceEmail, issueInvoice } from "@/lib/invoices/issue";
 import { afterPayment } from "@/lib/jobs";
 import { domainRe, normalizeDomain } from "@/lib/domains";
 import { parseEurToCents } from "@/lib/money";
@@ -452,7 +452,7 @@ export async function resendInvoice(paymentId: string): Promise<ActionResult> {
   if (!p.invoice?.elorusInvoiceId) return { ok: false, message: "No invoice yet" };
   try {
     const domains = (await db.packageWebsite.findMany({ where: { packageId: p.packageId }, include: { website: true } })).map((w) => w.website.domain).join(", ");
-    const mail = INVOICE_EMAIL[p.package.client.language];
+    const mail = invoiceEmail(p.package.client.language, p.package.client.invoiceType);
     await getElorus().emailInvoice({
       invoiceId: p.invoice.elorusInvoiceId,
       to: p.package.client.emails,

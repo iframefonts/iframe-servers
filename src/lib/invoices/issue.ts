@@ -63,16 +63,19 @@ export function elorusDocumentFor(invoiceType: "TPY" | "APY", regime: "domestic"
   return { series: "TPY", documentTypeId: tpy, mydataDocumentType: "2.1", classificationType: "E3_561_001", taxId: e.ELORUS_TAX_VAT24 ?? "VAT24" };
 }
 
-export const INVOICE_EMAIL = {
-  el: {
-    subject: (n: string, d: string) => `Τιμολόγιο ${n} · Ανανέωση φιλοξενίας ${d}`,
-    message: (d: string) => `Σας ευχαριστούμε για την ανανέωση της φιλοξενίας του ${d}. Επισυνάπτεται το παραστατικό σε PDF.\n\niFRAME Design Studio`,
-  },
-  en: {
-    subject: (n: string, d: string) => `Invoice ${n} · Hosting renewal ${d}`,
-    message: (d: string) => `Thank you for renewing the hosting for ${d}. Your invoice is attached as a PDF.\n\niFRAME Design Studio`,
-  },
-};
+/** Email that Elorus sends with the PDF. Names the document: ΑΠΥ is a receipt, not an invoice. */
+export function invoiceEmail(language: "el" | "en", invoiceType: "TPY" | "APY") {
+  const receipt = invoiceType === "APY";
+  return language === "el"
+    ? {
+        subject: (n: string, d: string) => `${receipt ? "Απόδειξη" : "Τιμολόγιο"} ${n} · Ανανέωση φιλοξενίας ${d}`,
+        message: (d: string) => `Σας ευχαριστούμε για την ανανέωση της φιλοξενίας του ${d}. Επισυνάπτεται το παραστατικό σε PDF.\n\niFRAME Design Studio`,
+      }
+    : {
+        subject: (n: string, d: string) => `${receipt ? "Receipt" : "Invoice"} ${n} · Hosting renewal ${d}`,
+        message: (d: string) => `Thank you for renewing the hosting for ${d}. Your ${receipt ? "receipt" : "invoice"} is attached as a PDF.\n\niFRAME Design Studio`,
+      };
+}
 
 /** Details missing in Elorus: retrying won't help, the admin has to fix the contact. */
 export class MissingDetailsError extends Error {}
@@ -135,7 +138,7 @@ export async function issueInvoice(paymentId: string, deps: Deps = {}) {
       });
     }
 
-    const mail = INVOICE_EMAIL[client.language];
+    const mail = invoiceEmail(client.language, client.invoiceType);
     await elorus.emailInvoice({
       invoiceId: invoice.elorusInvoiceId!,
       to: client.emails,

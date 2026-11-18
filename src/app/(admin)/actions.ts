@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { clientDeletion } from "@/lib/client-deletion";
 import { db } from "@/lib/db";
 import { addPeriod, parseAthensDate } from "@/lib/dates";
 import { getElorus } from "@/lib/elorus/client";
@@ -172,6 +173,29 @@ export async function addWebsite(clientId: string, _: ActionResult | null, formD
   }
   revalidatePath(`/clients/${clientId}`);
   return { ok: true, message: `Added ${domain}` };
+}
+
+export async function deleteClient(clientId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  const client = await db.client.findUnique({
+    where: { id: clientId },
+    include: { websites: { select: { domain: true } } },
+  });
+  if (!client) return { ok: false, message: "This client was already deleted" };
+  const d = await clientDeletion(clientId);
+  if (!d.allowed) {
+    return { ok: false, message: `Can't delete: ${d.issuedInvoices} invoice(s) issued in Elorus belong to this client` };
+  }
+  await db.client.delete({ where: { id: clientId } });
+  await audit(user.email, "client.deleted", "Client", clientId, {
+    name: client.name,
+    elorusContactId: client.elorusContactId,
+    websites: client.websites.map((w) => w.domain),
+    packages: d.packages,
+    payments: d.payments,
+  });
+  revalidatePath("/clients");
+  redirect("/clients");
 }
 
 export async function removeWebsite(websiteId: string): Promise<ActionResult> {

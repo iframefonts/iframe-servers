@@ -9,7 +9,7 @@ const UPDATED = { el: "18 Νοεμβρίου 2026", en: "18 November 2026" };
 const identity = (l: Locale) =>
   [
     `${company.legalName} (${company.name})`,
-    company.address,
+    company.address[l],
     l === "el" ? `ΑΦΜ ${company.vatNumber}` : `VAT no. ${company.vatNumber}`,
     l === "el" ? `Αρ. ΓΕΜΗ ${company.gemi}` : `GEMI no. ${company.gemi}`,
     `EUID ${company.euid}`,

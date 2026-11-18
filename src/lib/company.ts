@@ -7,7 +7,7 @@ export const company = {
   phone: { display: "+30 26510 65744", href: "tel:+302651065744" },
   website: "https://iframe.gr",
   legalName: "iFRAME OE",
-  address: "Kristalli 3, Ioannina, Greece",
+  address: { el: "Κρυστάλλη 3, Ιωάννινα", en: "Kristalli 3, Ioannina, Greece" },
   vatNumber: "997861806",
   gemi: "017053349000",
   euid: "ELGEMI.017053349000",

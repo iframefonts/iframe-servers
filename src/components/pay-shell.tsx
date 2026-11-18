@@ -35,7 +35,7 @@ export function PayShell({ locale, children, langHref }: { locale: Locale; child
         <p className="num">
           {locale === "el" ? "ΑΦΜ" : "VAT no."} {company.vatNumber} · {locale === "el" ? "ΓΕΜΗ" : "GEMI"} {company.gemi}
         </p>
-        <p>{company.address}</p>
+        <p>{company.address[locale]}</p>
         <nav aria-label={locale === "el" ? "Επικοινωνία και όροι" : "Contact and terms"} className="mt-1 flex flex-wrap gap-x-4">
           <a href={`mailto:${company.email}`} className={footerLink}>
             {company.email}

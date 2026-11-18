@@ -19,6 +19,11 @@ describe("Plesk server list import", () => {
       { domain: "kafekadoi.gr", server: "381815601.linuxzone191.grserver.gr", disabled: false },
     ]);
     expect(parsePlesk("kafekadoi.gr\n\t\nActive")).toEqual([{ domain: "kafekadoi.gr", server: null, disabled: false }]);
+    // Greek Plesk, no owner column: the server's own hostname row gives the server.
+    expect(parsePlesk("868580348.linuxzone143.grserver.gr\n\t\nΕνεργή\n\t1 MB\t0 MB/μήνα\nagnofarma.gr\n\t\nΑπενεργοποιημένο\nasyp.gr\n\t\nΕνεργή\nαπό 1\n10\nΌλες")).toEqual([
+      { domain: "agnofarma.gr", server: "868580348.linuxzone143.grserver.gr", disabled: true },
+      { domain: "asyp.gr", server: "868580348.linuxzone143.grserver.gr", disabled: false },
+    ]);
   });
 
   it("renames, attaches second domains, creates the rest and skips disabled ones", () => {

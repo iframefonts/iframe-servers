@@ -19,6 +19,8 @@ import { domainRe, normalizeDomain } from "../src/lib/domains";
 
 /** Second domains whose name differs from the site they belong to. */
 const ATTACH: Record<string, string> = { "ledadecoshop.com": "ledadeco.com" };
+/** Old entries misspelled beyond what the automatic rules catch: stored name → server domain. */
+const RENAME: Record<string, string> = { ioanninaphsycology: "ioanninapsychology.gr" };
 
 export type ServerDomain = { domain: string; server: string | null; disabled: boolean };
 
@@ -37,7 +39,7 @@ export function parsePlesk(text: string): ServerDomain[] {
     if (!cur) continue;
     const host = line.match(hostRe)?.[1];
     if (host && !cur.server) cur.server = host;
-    if (/(^|\t)\s*Disabled\s*($|\t)/.test(line)) cur.disabled = true;
+    if (/(^|\t)\s*(Disabled|Απενεργοποιημένο|Ανεσταλμένο|Suspended)\s*($|\t)/.test(line)) cur.disabled = true;
   }
   // An owner without the hostname in brackets (e.g. "sqseed_customer") is on the same server as the rest.
   const counts = new Map<string, number>();
@@ -78,6 +80,7 @@ export function planImport(entries: ServerDomain[], existing: Map<string, string
     const listed = (s: string) => entries.some((x) => x.domain === s);
     const bare = [...sites.keys()].find(
       (s) =>
+        RENAME[s] === e.domain ||
         (!s.includes(".") && s.replace(/-/g, "") === base(e.domain)) ||
         (s.replace(/-/g, "") === e.domain.replace(/-/g, "") && !listed(s)), // "mareasuites.gr" → "marea-suites.gr"
     );
